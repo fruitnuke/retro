@@ -37,6 +37,7 @@ def hunt_the_wumpus():
     hunter = random.randrange(0, 21)
     bats   = [random.randrange(0, 21) for _ in range(2)]
     pits   = [random.randrange(0, 21) for _ in range(2)]
+    arrows = 5
 
     while True:
         neighbouring_caves = cave[hunter]
@@ -71,7 +72,7 @@ def hunt_the_wumpus():
             path = []
             while len(path) < n:
                 room = int(raw_input('Room #? '))
-                if len(path) > 1 and room == path[-2]:
+                if (len(path) == 1 and room == hunter) or (len(path) > 1 and room == path[-2]):
                     print 'Arrows aren\'t that crooked - try another room'
                 else:
                     path.append(room)
@@ -87,6 +88,18 @@ def hunt_the_wumpus():
                     curr = room
                 else:
                     curr = random.choice(cave[curr])
+
+            arrows -= 1
+            if not arrows:
+                return
+
+            wumpus_moves = random.random() > 0.75
+            if wumpus_moves:
+                wumpus = random.choice(cave[wumpus])
+                if hunter == wumpus:
+                    print 'Tsk, tsk, tsk - wumpus got you!'
+                    return
+
         print
 
 if __name__ == '__main__':
