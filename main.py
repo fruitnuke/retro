@@ -1,6 +1,11 @@
 """Hunt the Wumpus
 
 http://www.atariarchives.org/morebasicgames/showpage.php?page=179
+
+TODO:
+ - handle invalid input
+ - replayable games, don't exit on failure
+ - game instructions
 """
 
 import random
@@ -27,16 +32,21 @@ cave = {
     19: (11,18,20),
     20: (13,16,19)}
 
-# TODO: Not spawn things in the same location
-# do not start in a location with something else in it
-# handle invalid input
+
+available_rooms = list(range(21))
+
+
+def spawn():
+    room = random.choice(available_rooms)
+    available_rooms.remove(room)
+    return room
 
 
 def hunt_the_wumpus():
-    wumpus = random.randrange(0, 21)
-    hunter = random.randrange(0, 21)
-    bats   = [random.randrange(0, 21) for _ in range(2)]
-    pits   = [random.randrange(0, 21) for _ in range(2)]
+    wumpus = spawn()
+    hunter = spawn()
+    bats   = [spawn() for _ in range(2)]
+    pits   = [spawn() for _ in range(2)]
     arrows = 5
 
     while True:
