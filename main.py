@@ -2,11 +2,12 @@
 
 http://www.atariarchives.org/morebasicgames/showpage.php?page=179
 
-TODO:
- - handle invalid input
- - save game state to allow replaying
+- Bugs (in the original game also):
+  - You can repeatedly put the same room for the arrow
+  - No range checking on the input for rooms for the arrow
 """
 
+from copy import deepcopy
 import random
 import textwrap
 
@@ -79,94 +80,151 @@ instructions = textwrap.dedent("""
        Pit    - 'I feel a draft'""")
 
 
+class GameState:
+
+    def __init__(self):
+        rooms = range(1, 21)
+        random.shuffle(rooms)
+        spawn = iter(rooms)
+        self.wumpus = spawn.next()
+        self.hunter = spawn.next()
+        self.bats   = [spawn.next() for _ in range(2)]
+        self.pits   = [spawn.next() for _ in range(2)]
+        self.arrows  = 5
+        self.playing = True
+        self.won     = False
+
+
+def prompt(msg, keys=None):
+    """Prompt the player for char input, optionally restricted to a set of chars."""
+    if keys:
+        msg += ' ({0})'.format('-'.join(c for c in keys))
+    while True:
+        val = raw_input(msg + '? ').lower()
+        if val in keys or not keys:
+            return val
+
+
+def prompt_int(msg, rng=None):
+    """Prompt the player for numeric input, optionally between a given [min, max] range (inclusive)."""
+    if rng:
+        msg += ' ({0}-{1})'.format(*rng)
+    while True:
+        try:
+            val = int(raw_input(msg + '? '))
+            if (rng and rng[0] <= val <= rng[1]) or not rng:
+                return val
+        except ValueError:
+            pass
+
+
+def move_wumpus(game):
+    if random.random() > 0.25:
+        game.wumpus = random.choice(cave[game.wumpus])
+
+
 def hunt_the_wumpus():
     quitting  = False
+    last_game = None
+    reset     = True
 
-    if raw_input('Instructions (y-n)? ').lower() == 'y':
+    if prompt('Instructions', 'yn') == 'y':
         print instructions
 
     while not quitting:
-        available_rooms = list(range(21))
+        if reset:
+            game = GameState()
+            last_game = deepcopy(game)
+        else:
+            game = deepcopy(last_game)
 
-        def spawn():
-            room = random.choice(available_rooms)
-            available_rooms.remove(room)
-            return room
-
-        wumpus = spawn()
-        hunter = spawn()
-        bats   = [spawn() for _ in range(2)]
-        pits   = [spawn() for _ in range(2)]
-        arrows = 5
         playing = True
-        won  = False
+        won     = False
 
         print
         print 'Hunt the Wumpus'
         print
 
         while playing:
-            neighbouring_caves = cave[hunter]
-            if wumpus in neighbouring_caves:
+            neighbouring_caves = cave[game.hunter]
+            if game.wumpus in neighbouring_caves:
                 print 'I smell a wumpus!'
-            if any(bat in neighbouring_caves for bat in bats):
+            if any(bat in neighbouring_caves for bat in game.bats):
                 print 'Bats nearby!'
-            if any(pit in neighbouring_caves for pit in pits):
+            if any(pit in neighbouring_caves for pit in game.pits):
                 print 'I feel a draught.'
-            print 'You are in a room', hunter
+            print 'You are in room', game.hunter
             print 'Tunnels lead to {0}, {1}, {2}'.format(*neighbouring_caves)
 
-            command = raw_input('Shoot or Move (s-m)? ').lower()
+            command = prompt('Shoot, Move or Quit', 'smq')
 
             if command == 'q':
                 playing = False
                 quitting = True
 
             if command == 'm':
-                hunter = int(raw_input('Where to? '))
-                if hunter in bats:
+                while True:
+                    to = prompt_int('Where to')
+                    if to in neighbouring_caves:
+                        game.hunter = to
+                        break
+                    else:
+                        print 'Not possible -'
+
+                if game.hunter in game.bats:
                     print 'Zap -- super bat snatch! Elsewhereville for you!'
-                    hunter = random.randrange(0, 21)
-                elif hunter in pits:
+                    game.hunter = random.randrange(0, 21)
+                elif game.hunter in game.pits:
                     print 'YYYIIIIEEEE... fell in pit'
                     playing = False
-                elif hunter == wumpus:
-                    print 'Tsk, tsk, tsk - Wumpus got you!'
-                    playing = False
+                elif game.hunter == game.wumpus:
+                    print '... oops! Bumped a wumpus'
+                    move_wumpus(game)
+                    if game.hunter == game.wumpus:
+                        print 'Tsk, tsk, tsk - Wumpus got you!'
+                        playing = False
+
+                print
 
             elif command.lower() == 's':
-                n = int(raw_input('No. of rooms (1-5)? '))
+                n = prompt_int('No. of rooms', [1, 5])
                 path = []
                 while len(path) < n:
-                    room = int(raw_input('Room #? '))
-                    if (len(path) == 1 and room == hunter) or (len(path) > 1 and room == path[-2]):
+                    room = prompt_int('Room')
+                    if (len(path) == 1 and room == game.hunter) or (len(path) > 1 and room == path[-2]):
                         print 'Arrows aren\'t that crooked - try another room'
                     else:
                         path.append(room)
-                curr = hunter
+
+                curr = game.hunter
                 for room in path:
                     if room in cave[curr]:
-                        if room == hunter:
+                        if room == game.hunter:
                             print 'Ouch! Arrow got you!'
                             playing = False
-                        if room == wumpus:
+                            break
+                        elif room == game.wumpus:
                             print 'Aha! You got the wumpus!'
                             playing = False
                             won = True
+                            break
                         curr = room
                     else:
                         curr = random.choice(cave[curr])
+                else:
+                    print 'Missed'
 
-                arrows -= 1
-                if not arrows:
-                    return
+                if not won:
+                    game.arrows -= 1
+                    if not game.arrows:
+                        playing = False
 
-                wumpus_moves = random.random() > 0.75
-                if wumpus_moves:
-                    wumpus = random.choice(cave[wumpus])
-                    if hunter == wumpus:
+                    move_wumpus(game)
+                    if game.hunter == game.wumpus:
                         print 'Tsk, tsk, tsk - wumpus got you!'
                         playing = False
+
+                print
 
         if not quitting:
             if won:
@@ -174,7 +232,7 @@ def hunt_the_wumpus():
             else:
                 print 'Ha ha ha - you lose!'
 
-            foo = bool(raw_input('Same set-up (y-n)? '))
+            reset = prompt('Same set-up', 'yn') == 'n'
             print
 
 
