@@ -1,5 +1,4 @@
-Hunt the Wumpus
----------------
+## Hunt the Wumpus
 
 An implementation in Python 2.7 of the original "Hunt the Wumpus" game by
 Gregory Yob circa the mid 1970s, as described in
@@ -8,10 +7,9 @@ implementation remains true to the original game play, including bugs
 (features?) that are present in the original implementation.  I've made only
 typographical adjustments and the addition of a 'q' key to quit.
 
-	$ python main.py
+	$ python wumpus.py
 
-A sample run through
-====================
+### A sample run through
 
 	Instructions (y-n)? y
 
@@ -60,78 +58,39 @@ A sample run through
 
 	Hunt the Wumpus
 
+	I feel a draught.
 	You are in room 17
 	Tunnels lead to 7, 16, 18
 	Shoot, Move or Quit (s-m-q)? m
 	Where to? 7
 
-	I feel a draught.
+	Bats nearby!
 	You are in room 7
 	Tunnels lead to 6, 8, 17
 	Shoot, Move or Quit (s-m-q)? m
 	Where to? 17
 
-	You are in room 17
-	Tunnels lead to 7, 16, 18
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 16
-
-	[...]
-
-	You are in room 3
-	Tunnels lead to 2, 4, 12
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 2
-
-	Bats nearby!
-	You are in room 2
-	Tunnels lead to 1, 3, 10
+	Zap -- super bat snatch! Elsewhereville for you!
+	You are in room 6
+	Tunnels lead to 5, 7, 15
 	Shoot, Move or Quit (s-m-q)? m
 	Where to? 1
-	Zap -- super bat snatch! Elsewhereville for you!
 
-	Bats nearby!
 	You are in room 5
 	Tunnels lead to 1, 4, 6
 	Shoot, Move or Quit (s-m-q)? m
-	Where to? 6
-
-	Bats nearby!
-	You are in room 6
-	Tunnels lead to 5, 7, 15
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 15
-
-	You are in room 15
-	Tunnels lead to 6, 14, 16
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 6
-
-	Bats nearby!
-	You are in room 6
-	Tunnels lead to 5, 7, 15
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 7
-
-	I feel a draught.
-	You are in room 7
-	Tunnels lead to 6, 8, 17
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 17
-
-	You are in room 17
-	Tunnels lead to 7, 16, 18
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 18
+	Where to? 4
 
 	I smell a wumpus!
 	I feel a draught.
-	You are in room 18
-	Tunnels lead to 9, 17, 19
+	You are in room 4
+	Tunnels lead to 3, 5, 14
 	Shoot, Move or Quit (s-m-q)? s
 	No. of rooms (1-5)? 1
-	Room? 9
+	Room? 14
 	Aha! You got the wumpus!
 
 	Hee hee hee - the Wumpus'll getcha next time!!
 	Same set-up (y-n)? y
+
+## Hammurabi
