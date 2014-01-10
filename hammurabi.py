@@ -1,4 +1,13 @@
-import random
+"""The classic game of Hammurabi.
+
+TODO:
+ - mortality rates and end-game
+ - input error handling
+ - plague
+ - impeachment
+"""
+
+from random import randint, choice
 import textwrap
 import math
 
@@ -18,22 +27,23 @@ class EndGame(RuntimeError):
 
 
 def hammurabi():
-
     harvest = 3000
     grain   = 2800
-    eaten   = 200
-    bpa     = 3 # bushels per acre
-    acres   = int(math.floor(harvest / bpa))
+    ratfood = 200
+    _yield  = 3 # bushels per acre
+    acres   = int(math.floor(harvest / _yield))
     pop     = 100
+    born    = 5
+    starved = 0
 
     print('Try your hand at governing ancient Sumeria\n'
           'for a ten-year term of office.')
 
     try:
         for year in range(1, 11):
-            print(report.format(year, 0, 5, pop, acres, bpa, eaten, grain))
+            print(report.format(year, starved, born, pop, acres, _yield, ratfood, grain))
 
-            price = random.randint(17, 26)
+            price = randint(17, 26)
             print('Land is trading at {} bushels per acre.'.format(price))
 
             def prompt(msg, is_valid, fail_msg):
@@ -83,8 +93,17 @@ def hammurabi():
             grain -= int(math.ceil(planted / 2))
 
             # next year
-            bpa = random.randint(1, 6) # farm yield fluctuates each year
-            grain += planted * bpa     # harvest time!
+            _yield  = randint(1, 6)
+            harvest = planted * _yield
+            ratfood = int(grain / choice([2, 4, 6])) if bool(choice([0, 1])) else 0
+            grain   = grain + harvest - ratfood
+            born    = int(randint(1, 6) * (20 * acres + grain) / float(pop) / 100.0 + 1)
+            fed     = int(feed / 20.0)
+            starved = pop - fed
+            pop     = pop - starved + born
+
+            total_deaths += starved
+            mortality_rate = ((year - 1) * mortality_rate + starved * 100 / pop) / year
 
     except EndGame as e:
         print(e)
