@@ -9,88 +9,12 @@ typographical adjustments and the addition of a 'q' key to quit.
 
 	$ python wumpus.py
 
-### A sample run through
-
-	Instructions (y-n)? y
-
-	Welcome to 'Hunt the Wumpus'.
-
-	The wumpus lives in a cave of 20 rooms. Each room has 3 tunnels
-	leading to other rooms. (Look at a dodecahedron to see how this works
-	- if you don't know what a dodecahedron is, ask someone).
-
-	Hazards:
-	   Bottomless Pits - two rooms have bottomless pits in them. If you go
-		  there, you fall into the pit (and lose!)
-
-	   Super Bats - two other rooms have super bats. If you go there, a
-		  bat grabs you and takes you to some other room at random (which
-		  might be troublesome).
-
-	Wumpus:
-	   The wumpus is not bothered by the hazards (he has sucker feet and
-	   is too big for a bat to lift).  Usually he is asleep. Two things
-	   wake him up: your entering his room or your shooting an arrow.
-
-	   If the wumpus wakes, he moves (p=.75) one room or stays still
-	   (p=.25). After that, if he is where you are, he eats you up (and you
-	   lose!)
-
-	You:
-	   Each turn you may move or shoot a crooked arrow.
-
-	   Moving: you can go one room (through one tunnel).
-
-	   Arrows: you have 5 arrows. you lose when you run out.  Each arrow
-		  can go from 1 to 5 rooms.  You aim by telling the computer the
-		  room #s you want the arrow to go to.  If the arrow can't go that
-		  way (ie no tunnel) it moves at random to the next room.  If the
-		  arrow hits the wumpus, you win.  If the arrow hits you, you
-		  lose.
-
-	Warnings:
-	   When you are one room away from the wumpus or a hazard, the computer
-	   says:
-
-	   Wumpus - 'I smell a wumpus'
-	   Bat    - 'Bats nearby'
-	   Pit    - 'I feel a draft'
-
-	Hunt the Wumpus
-
-	I feel a draught.
-	You are in room 17
-	Tunnels lead to 7, 16, 18
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 7
-
-	Bats nearby!
-	You are in room 7
-	Tunnels lead to 6, 8, 17
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 17
-
-	Zap -- super bat snatch! Elsewhereville for you!
-	You are in room 6
-	Tunnels lead to 5, 7, 15
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 1
-
-	You are in room 5
-	Tunnels lead to 1, 4, 6
-	Shoot, Move or Quit (s-m-q)? m
-	Where to? 4
-
-	I smell a wumpus!
-	I feel a draught.
-	You are in room 4
-	Tunnels lead to 3, 5, 14
-	Shoot, Move or Quit (s-m-q)? s
-	No. of rooms (1-5)? 1
-	Room? 14
-	Aha! You got the wumpus!
-
-	Hee hee hee - the Wumpus'll getcha next time!!
-	Same set-up (y-n)? y
-
 ## Hammurabi
+
+[Hammurabi](https://en.wikipedia.org/wiki/Hamurabi) is a game of
+resource-management, the text-based ancestor of games like Civilization. You
+play the role of ruler of Sumeria over a decade, during which your decision as
+to how much to feed your people, how much land to buy and sell and harvest,
+decide the fate of your city. Written in Python 3 and based on the 1978
+implementation in
+[BASIC Computer Games](http://atariarchives.org/basicgames/showpage.php?page=78).

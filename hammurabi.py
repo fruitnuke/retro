@@ -1,7 +1,7 @@
 """The classic game of Hammurabi.
 
-TODO:
- - input error handling
+BUGS:
+ - Mortality calc rates seem wrong at end of game.
 """
 
 from random import randint, choice, random
@@ -10,6 +10,7 @@ import math
 
 
 class EndGame(RuntimeError):
+
     pass
 
 
@@ -45,12 +46,13 @@ def hammurabi():
           'for a ten-year term of office.')
 
     try:
-        for year in range(1, 3):
+        for year in range(1, 11):
             if plague:
                 pop = int(pop / 2)
                 plague_text = '\na horrible plague struck! Half the people died,'
             else:
                 plague_text = ''
+
             print(textwrap.dedent('''
                 Hammurabi: I beg to report to you,
                 in year {}, {} people starved, {} came to the city,{}
@@ -66,7 +68,10 @@ def hammurabi():
 
             def prompt(msg, is_valid, fail_msg):
                 while True:
-                    amt = int(input(msg + ' '))
+                    try:
+                        amt = int(input(msg + ' '))
+                    except ValueError:
+                        continue
                     if amt < 0:
                         raise Resigns()
                     if is_valid(amt):
