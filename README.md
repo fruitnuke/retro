@@ -18,3 +18,5 @@ to how much to feed your people, how much land to buy and sell and harvest,
 decide the fate of your city. Written in Python 3 and based on the 1978
 implementation in
 [BASIC Computer Games](http://atariarchives.org/basicgames/showpage.php?page=78).
+
+    $ python3 hammurabi.py
