@@ -78,7 +78,7 @@ def hammurabi():
                         return amt
                     print(fail_msg)
 
-            buy = prompt('How many acres do you wish to buy?',
+            buy = prompt('How many acres do you wish to buy (0-{})?'.format(int(grain / price)),
                          lambda n: n * price <= grain,
                          'Hammurabi: Think again. You have only {} bushels of grain. Now then,'.format(grain))
 
@@ -86,20 +86,21 @@ def hammurabi():
                 acres += buy
                 grain -= price * buy
             elif buy == 0:
-                sell = prompt('How many acres do you wish to sell?',
+                sell = prompt('How many acres do you wish to sell (0-{})?'.format(acres),
                               lambda n: n <= acres,
                               'Hammurabi: Think again. You own only {} acres. Now then,'.format(acres))
                 if sell > 0:
                     acres -= sell
                     grain += (sell * price)
 
-            feed = prompt('How many bushels do you wish to feed your people?',
+            feed = prompt('How many bushels do you wish to feed your people (0-{})?'.format(grain),
                           lambda n: n <= grain,
                           'Hammurabi: Think again. You have only {} bushels of grain. Now then,'.format(grain))
             grain = grain - feed
 
             while True:
-                planted = int(input('How many acres do you wish to plant? '))
+                limit = min(acres, grain * 2, pop * 10)
+                planted = int(input('How many acres do you wish to plant (0-{})? '.format(limit)))
                 if planted < 0:
                     raise Resigns()
                 if planted > acres:
