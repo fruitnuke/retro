@@ -2,7 +2,7 @@
 
 Credits
 -------
-Original concept by Vince Talbot in 1976, this implementation is based on the BASIC version that appears
+Original concept by Vince Talbot in 1976, my implementation is based on the BASIC version that appears
 in Big Computer Games (1984).
 
 Instructions
@@ -28,6 +28,13 @@ Differences from the original
 import random
 
 
+def main():
+    while True:
+        dukedom()
+        if prompt_key('Do you wish to play again? ', 'yn') == 'n':
+            break
+
+
 def dukedom():
     peasants = 100
     grain    = 4177 # Hectolitres
@@ -44,33 +51,30 @@ def dukedom():
                   'right.\n')
             break
 
-        # Food for peasants
-        while True:
-            food = prompt_int('Grain for food = ')
-            if food <= grain:
-                break
-            print('But you don\'t have enough grain.\nYou only have {}HL. of grain left.\n'.format(grain))
+        @validate_input
+        def valid_food(x):
+            if x > grain:
+                raise NotEnoughGrain(grain)
+
+        food = prompt_int('Grain for food = ', valid_food)
         grain -= food
 
-        # Farm the land
-        while True:
-            farmed = prompt_int('Land to be planted = ')
-            if farmed > land:
-                print('But you don\'t have enough land.\nYou only have {}HA. of land left.\n'.format(land))
-            elif (farmed * 2) > grain:
-                print('But you don\'t have enough grain.\n'
-                      'You only have {}HL. of grain left.\n'
-                      'Enough to plant {}HA. of land\n'.format(grain, int(grain / 2)))
-            elif (peasants * 4) > land:
-                print('But you don\'t have enough peasants to farm that land.\n'
-                      'You only have enough to farm {} HA. of land.'.format(int(peasants / 4)))
-            else:
-                break
+        @validate_input
+        def valid_farmland(land_to_farm):
+            if land_to_farm > land:
+                raise NotEnoughLand(land)
+            elif (land_to_farm * 2) > grain:
+                raise NotEnoughGrain(grain, hint=True)
+            elif land_to_farm > (peasants * 4):
+                raise NotEnoughWorkers(peasants)
+
+        farmed = prompt_int('Land to be planted = ', valid_farmland)
         grain -= (farmed * 2)
 
         crop_yld = min(13, max(4, int(round(random.gauss(8.5, 1.5)))))
         print('Yield = {} HL/HA.'.format(crop_yld))
 
+        # Advance a year
         year  += 1
         grain += crop_yld * farmed
 
@@ -80,14 +84,23 @@ def dukedom():
             peasants -= peasants - int(food / 13)
 
 
-def prompt_int(msg):
+def validate_input(validf):
+    def wrapper(x):
+        if x < 0:
+            raise ValueError()
+        validf(x)
+        return x
+    return wrapper
+
+
+def prompt_int(msg, valid):
     while True:
         try:
-            val = int(input(msg))
+            return valid(int(input(msg)))
+        except InvalidInput as e:
+            print(e)
         except ValueError:
-            continue
-        if val >= 0:
-            return val
+            pass
 
 
 def prompt_key(msg, keys):
@@ -97,8 +110,32 @@ def prompt_key(msg, keys):
             return val
 
 
+class InvalidInput(ValueError):
+
+    pass
+
+
+class NotEnoughGrain(InvalidInput):
+
+    def __init__(self, grain, hint=False):
+        msg = 'But you don\'t have enough grain.\nYou only have {} HL. of grain left.'.format(grain)
+        if hint:
+            msg += '\nEnough to plant {} HA. of land'.format(int(grain / 2))
+        super().__init__(msg)
+
+
+class NotEnoughLand(InvalidInput):
+
+    def __init__(self, land):
+        super().__init__('But you don\'t have enough land.\nYou only have {} HA. of land left.'.format(land))
+
+
+class NotEnoughWorkers(InvalidInput):
+
+    def __init__(self, workers):
+        super().__init__('But you don\'t have enough peasants to farm that land.\n'
+                         'You only have enough to farm {} HA. of land.'.format(int(workers * 4)))
+
+
 if __name__ == '__main__':
-    while True:
-        dukedom()
-        if prompt_key('Do you wish to play again? ', 'yn') == 'n':
-            break
+    main()
