@@ -23,6 +23,10 @@ Differences from the original
   that of a normal function. Python has a (couple of) random number generator(s) with normal distribution built
   in so I just use that. Then it's just working out the mean and standard deviation for each bell curve that Talbot
   intended.
+
+TODO
+----
+- Check the land price probability distribution / calc, it's way off.
 '''
 
 import random
@@ -42,6 +46,7 @@ def dukedom():
     grain    = 4177 # Hectolitres
     land     = 600  # Hectares
     year     = 1
+    crop_yld = 3.95
 
     while True:
         print('\nYear {} Peasants {} Land {} Grain {}\n'.format(year, peasants, land, grain))
@@ -52,15 +57,43 @@ def dukedom():
                   'the High King has abolished your Ducal\n'
                   'right.\n')
             break
+        if land <= 199:
+            print('You have so little land left that\n'
+                  'the peasants are tired of war and starvation.\n'
+                  'You are deposed.\n')
+            break
 
+        # Feed the peasants
         @validate_input
         def valid_food(x):
             if x > grain:
                 raise NotEnoughGrain(grain)
-
         food = prompt_int('Grain for food = ', valid_food)
         grain -= food
 
+        # Buy and sell land
+        bid = round(2 * crop_yld + distributions.random(1) - 5)
+        @validate_input
+        def valid_buy(x):
+            if (x * bid) > grain:
+                raise NotEnoughGrain(grain)
+        bought = prompt_int('Land to buy at {0} HL./HA. = '.format(bid), valid_buy)
+        if bought == 0:
+            offer = bid - 1
+            @validate_input
+            def valid_sell(x):
+                if x > land:
+                    raise NotEnoughLand(land)
+                if (x * offer) > 4000:
+                    raise Overfill()
+            sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
+            land  -= sold
+            grain += offer * sold
+        else:
+            land  += bought
+            grain -= bid * bought
+
+        # Produce grain
         @validate_input
         def valid_farmland(land_to_farm):
             if land_to_farm > land:
@@ -69,10 +102,8 @@ def dukedom():
                 raise NotEnoughGrain(grain, hint=True)
             elif land_to_farm > (peasants * 4):
                 raise NotEnoughWorkers(peasants)
-
         farmed = prompt_int('Land to be planted = ', valid_farmland)
         grain -= (farmed * 2)
-
         crop_yld = distributions.random(2) + 9
         print('Yield = {} HL/HA.'.format(crop_yld))
 
@@ -88,7 +119,6 @@ def dukedom():
         natural_deaths = int(0.3 - peasants / 22)
         births = int(round(peasants / (distributions.random(8) + 4)))
         peasants += births + natural_deaths
-
 
 
 def validate_input(validf):
@@ -143,11 +173,17 @@ class NotEnoughWorkers(InvalidInput):
         super().__init__('But you don\'t have enough peasants to farm that land.\n'
                          'You only have enough to farm {} HA. of land.'.format(int(workers * 4)))
 
+class Overfill(InvalidInput):
+
+    def __init__(self):
+        super().__init__('No buyers have that much grain, try less')
+
 
 class Gaussian:
 
     def __init__(self):
         self.means = [None] * 8
+        self.means[0] = self._gauss(6.0, 1.0, 4, 8)
         self.means[1] = self._gauss(6.5, 1.1, 4, 9)
         self.means[7] = self._gauss(5.0, 2.0, 1, 9)
 
