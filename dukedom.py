@@ -73,19 +73,22 @@ def dukedom():
         farmed = prompt_int('Land to be planted = ', valid_farmland)
         grain -= (farmed * 2)
 
-        crop_yld = distributions.random(2)
+        crop_yld = distributions.random(2) + 9
         print('Yield = {} HL/HA.'.format(crop_yld))
 
         # Advance a year
         year  += 1
         grain += crop_yld * farmed
 
+        # population mechanics
         food_per_capita = int(food / peasants)
         if food_per_capita < 13:
             print('Some peasants have starved.')
             peasants -= peasants - int(food / 13)
-
         natural_deaths = int(0.3 - peasants / 22)
+        births = int(round(peasants / (distributions.random(8) + 4)))
+        peasants += births + natural_deaths
+
 
 
 def validate_input(validf):
@@ -144,12 +147,15 @@ class NotEnoughWorkers(InvalidInput):
 class Gaussian:
 
     def __init__(self):
-        self.curves = [None] * 8
-        self.curves[1] = (4, 13, int(round(random.gauss(6, 1))), 1.5)
+        self.means = [None] * 8
+        self.means[1] = self._gauss(6.5, 1.1, 4, 9)
+        self.means[7] = self._gauss(5.0, 2.0, 1, 9)
+
+    def _gauss(self, mean, dev, a, b):
+        return min(b, max(a, int(round(random.gauss(mean, dev)))))
 
     def random(self, curve):
-        a, b, mean, dev = self.curves[curve - 1]
-        return min(b, max(a, int(round(random.gauss(mean, dev)))))
+        return self._gauss(0.5, 1.5, -3, 2) + self.means[curve-1]
 
 
 class Talbot:
@@ -163,10 +169,9 @@ class Talbot:
     def __init__(self):
         self.table = [0] * 8
         self.init_table()
-        self.adjustments = [0, 9, 0, 0, 0, 0, 0, 0]
 
     def random(self, curve):
-        return self.fnx(curve - 1) + self.adjustments[curve - 1]
+        return self.fnx(curve - 1)
 
     def fnr(self, a, b):
         """This function uses rounding to produce a very loose approximation of a normal distribution.
