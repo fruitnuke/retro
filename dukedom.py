@@ -23,12 +23,15 @@ Differences from the original
   that of a normal function. Python has a (couple of) random number generator(s) with normal distribution built
   in so I just use that. Then it's just working out the mean and standard deviation for each bell curve that Talbot
   intended.
+- I removed the 'peasants from end' stat, as it's always the same as 'peasants' which is printed each turn anyway.
 
 TODO
 ----
 - Check the land price probability distribution / calc, it's way off.
+- Co-routines to separate UI and simulation logic?
 '''
 
+import collections
 import random
 
 
@@ -39,25 +42,54 @@ def main():
             break
 
 
+class GameReport:
+
+    def __init__(self):
+        self._data = collections.OrderedDict([
+            ('Peasants at start', 96),
+            ('Starvations',       0 ),
+            ('Disease victims',   0 ),
+            ('Natural deaths',   -4 ),
+            ('Births',            8 )])
+
+    def record(self, stat, x):
+        self._data[stat] = x
+
+    def __iter__(self):
+        return iter(self._data.items())
+
+
+class GameState:
+
+    def __init__(self):
+        self.peasants = 100
+        self.grain    = 4177 # Hectolitres
+        self.land     = 600  # Hectares
+        self.year     = 1
+        self.cyield    = 3.95
+        self.cool_down = 0
+
+
 def dukedom():
     distributions = Gaussian()  # Talbot()
 
-    peasants = 100
-    grain    = 4177 # Hectolitres
-    land     = 600  # Hectares
-    year     = 1
-    crop_yld = 3.95
+    report = GameReport()
+    game   = GameState()
 
     while True:
-        print('\nYear {} Peasants {} Land {} Grain {}\n'.format(year, peasants, land, grain))
+        print('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain))
+        for label, x in report:
+            if x != 0:
+                print('  {:<20}{}'.format(label, x))
+        print('')
 
         # Test for end game
-        if peasants < 33:
+        if game.peasants < 33:
             print('You have so few peasants left that\n'
                   'the High King has abolished your Ducal\n'
                   'right.\n')
             break
-        if land <= 199:
+        if game.land <= 199:
             print('You have so little land left that\n'
                   'the peasants are tired of war and starvation.\n'
                   'You are deposed.\n')
@@ -66,70 +98,79 @@ def dukedom():
         # Feed the peasants
         @validate_input
         def valid_food(x):
-            if x > grain:
-                raise NotEnoughGrain(grain)
+            if x > game.grain:
+                raise NotEnoughGrain(game.grain)
         food = prompt_int('Grain for food = ', valid_food)
-        grain -= food
+        game.grain -= food
 
         # Buy and sell land
-        bid = round(2 * crop_yld + distributions.random(1) - 5)
+        bid = round(2 * game.cyield + distributions.random(1) - 5)
         @validate_input
         def valid_buy(x):
-            if (x * bid) > grain:
-                raise NotEnoughGrain(grain)
+            if (x * bid) > game.grain:
+                raise NotEnoughGrain(game.grain)
         bought = prompt_int('Land to buy at {0} HL./HA. = '.format(bid), valid_buy)
         if bought == 0:
             offer = bid - 1
             @validate_input
             def valid_sell(x):
-                if x > land:
-                    raise NotEnoughLand(land)
+                if x > game.land:
+                    raise NotEnoughLand(game.land)
                 if (x * offer) > 4000:
                     raise Overfill()
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
-            land  -= sold
-            grain += offer * sold
+            game.land  -= sold
+            game.grain += offer * sold
         else:
-            land  += bought
-            grain -= bid * bought
+            game.land  += bought
+            game.grain -= bid * bought
 
         # Produce grain
         @validate_input
         def valid_farmland(land_to_farm):
-            if land_to_farm > land:
-                raise NotEnoughLand(land)
-            elif (land_to_farm * 2) > grain:
-                raise NotEnoughGrain(grain, hint=True)
-            elif land_to_farm > (peasants * 4):
-                raise NotEnoughWorkers(peasants)
+            if land_to_farm > game.land:
+                raise NotEnoughLand(game.land)
+            elif (land_to_farm * 2) > game.grain:
+                raise NotEnoughGrain(game.grain, hint=True)
+            elif land_to_farm > (game.peasants * 4):
+                raise NotEnoughWorkers(game.peasants)
         farmed = prompt_int('Land to be planted = ', valid_farmland)
-        grain -= (farmed * 2)
-        crop_yld = distributions.random(2) + 9
-        print('Yield = {} HL/HA.'.format(crop_yld))
+        game.grain -= (farmed * 2)
+        game.cyield = distributions.random(2) + 9
+        print('Yield = {} HL/HA.'.format(game.cyield))
 
         # Advance a year
-        year  += 1
-        grain += crop_yld * farmed
+        game.year  += 1
+        game.grain += game.cyield * farmed
 
         # population mechanics
-        food_per_capita = int(food / peasants)
-        if food_per_capita < 13:
+        starved = 0
+        if int(food / game.peasants) < 13:
             print('Some peasants have starved.')
-            peasants -= peasants - int(food / 13)
+            starved = -round(game.peasants - food / 13)
+            game.peasants += starved
+        report.record('Starvations', starved)
 
-        pdisease = distributions.random(8) + 1
-        if pdisease == 1 and cool_down == 0:
+        deaths = 0
+        chance_of_outbreak = distributions.random(8) + 1
+        game.cool_down -= 1
+        if chance_of_outbreak == 1 and game.cool_down == 0:
             print('The BLACK PLAGUE has struck the area')
-            cool_down = 13
-            peasants -= round(peasants/3)
-        elif pdisease < 4:
+            game.cool_down = 13
+            deaths = -round(game.peasants / 3)
+        elif chance_of_outbreak < 4:
             print('A POX EPIDEMIC has broken out')
-            peasants -= round(peasants / (pdisease * 5))
+            deaths = -round(game.peasants / (chance_of_outbreak * 5))
+        game.peasants += deaths
+        report.record('Disease victims', deaths)
 
-        natural_deaths = int(0.3 - peasants / 22)
-        births = int(round(peasants / (distributions.random(8) + 4)))
-        peasants += births + natural_deaths
+        natural = int(0.3 - game.peasants / 22)
+        report.record('Natural deaths', natural)
+        deaths += natural
 
+        births = int(round(game.peasants / (distributions.random(8) + 4)))
+        report.record('Births', births)
+        game.peasants += births + deaths
 
 
 
