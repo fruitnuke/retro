@@ -116,9 +116,21 @@ def dukedom():
         if food_per_capita < 13:
             print('Some peasants have starved.')
             peasants -= peasants - int(food / 13)
+
+        pdisease = distributions.random(8) + 1
+        if pdisease == 1 and cool_down == 0:
+            print('The BLACK PLAGUE has struck the area')
+            cool_down = 13
+            peasants -= round(peasants/3)
+        elif pdisease < 4:
+            print('A POX EPIDEMIC has broken out')
+            peasants -= round(peasants / (pdisease * 5))
+
         natural_deaths = int(0.3 - peasants / 22)
         births = int(round(peasants / (distributions.random(8) + 4)))
         peasants += births + natural_deaths
+
+
 
 
 def validate_input(validf):
