@@ -38,7 +38,7 @@ import random
 def main():
     while True:
         dukedom()
-        if prompt_key('Do you wish to play again? ', 'yn') == 'n':
+        if prompt_key('Do you wish to play again?', 'yn') == 'n':
             break
 
 
@@ -50,7 +50,14 @@ class GameReport:
             ('Starvations',       0 ),
             ('Disease victims',   0 ),
             ('Natural deaths',   -4 ),
-            ('Births',            8 )])
+            ('Births',            8 ),
+            ('Land at start',     600),
+            ('Bought/sold',       0),
+            ('Grain at start',    4177),
+            ('Used for food',     0),
+            ('Land deals',        0),
+            ('Seeding',           0),
+            ('Crop yield',        0)])
 
     def record(self, stat, x):
         self._data[stat] = x
@@ -71,17 +78,23 @@ class GameState:
 
 
 def dukedom():
-    distributions = Gaussian()  # Talbot()
+    print('')
+    print('D U K E D O M')
+    print('')
 
+    show_report = prompt_key('Do you want to skip detailed reports?', 'yn') == 'n'
+
+    distributions = Gaussian()  # Talbot()
     report = GameReport()
     game   = GameState()
 
     while True:
         print('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain))
-        for label, x in report:
-            if x != 0:
-                print('  {:<20}{}'.format(label, x))
-        print('')
+        if show_report:
+            for label, x in report:
+                if x != 0:
+                    print('  {:<20}{}'.format(label, x))
+            print('')
 
         # Test for end game
         if game.peasants < 33:
@@ -102,6 +115,7 @@ def dukedom():
                 raise NotEnoughGrain(game.grain)
         food = prompt_int('Grain for food = ', valid_food)
         game.grain -= food
+        report.record('Used for food', -food)
 
         # Buy and sell land
         bid = round(2 * game.cyield + distributions.random(1) - 5)
@@ -121,9 +135,13 @@ def dukedom():
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
             game.land  -= sold
             game.grain += offer * sold
+            report.record('Bought/sold', -sold)
+            report.record('Land deals', offer * sold)
         else:
             game.land  += bought
             game.grain -= bid * bought
+            report.record('Bought/sold', bought)
+            report.record('Land deals', -bid * bought)
 
         # Produce grain
         @validate_input
@@ -135,13 +153,17 @@ def dukedom():
             elif land_to_farm > (game.peasants * 4):
                 raise NotEnoughWorkers(game.peasants)
         farmed = prompt_int('Land to be planted = ', valid_farmland)
-        game.grain -= (farmed * 2)
+        seeding = -(farmed * 2)
+        game.grain += seeding
         game.cyield = distributions.random(2) + 9
         print('Yield = {} HL/HA.'.format(game.cyield))
+        report.record('Seeding', seeding)
 
         # Advance a year
         game.year  += 1
-        game.grain += game.cyield * farmed
+        crops = game.cyield * farmed
+        game.grain += crops
+        report.record('Crop yield', crops)
 
         # population mechanics
         starved = 0
@@ -195,7 +217,7 @@ def prompt_int(msg, valid):
 
 def prompt_key(msg, keys):
     while True:
-        val = input(msg).lower()
+        val = input(msg+' ').lower()
         if val in keys:
             return val
 
