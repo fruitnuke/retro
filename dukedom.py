@@ -33,6 +33,7 @@ TODO
 
 import collections
 import random
+import textwrap
 
 
 def main():
@@ -46,21 +47,31 @@ class GameReport:
 
     def __init__(self):
         self._data = collections.OrderedDict([
-            ('Peasants at start', 96),
-            ('Starvations',       0 ),
-            ('Disease victims',   0 ),
-            ('Natural deaths',   -4 ),
-            ('Births',            8 ),
-            ('Land at start',     600),
-            ('Bought/sold',       0),
-            ('Grain at start',    4177),
-            ('Used for food',     0),
-            ('Land deals',        0),
-            ('Seeding',           0),
-            ('Crop yield',        0)])
+            ('Peasants at start', 96  ),
+            ('Starvations',       0   ),
+            ('King\'s levy',      0   ),
+            ('Disease victims',   0   ),
+            ('Natural deaths',   -4   ),
+            ('Births',            8   ),
+            ('Land at start',     600 ),
+            ('Bought/sold',       0   ),
+            ('Grain at start',    5193),
+            ('Used for food',    -1344),
+            ('Land deals',        0   ),
+            ('Seeding',          -768 ),
+            ('Rat losses',        0   ),
+            ('Crop yield',        1516),
+            ('Castle expense',   -120 )])
 
     def record(self, stat, x):
         self._data[stat] = x
+
+    ZERO_EACH_YEAR = ['Starvations', 'King\'s Levy', 'Disease victims', 'Bought/sold',
+                      'Land deals', 'Rat losses', 'Castle expense']
+
+    def reset(self):
+        for x in self.ZERO_EACH_YEAR:
+            self._data[x] = 0
 
     def __iter__(self):
         return iter(self._data.items())
@@ -72,8 +83,8 @@ class GameState:
         self.peasants = 100
         self.grain    = 4177 # Hectolitres
         self.land     = 600  # Hectares
-        self.year     = 1
-        self.cyield    = 3.95
+        self.year     = 0
+        self.crop_yield    = 3.95
         self.cool_down = 0
 
 
@@ -94,6 +105,8 @@ def dukedom():
             for label, x in report:
                 if x != 0:
                     print('  {:<20}{}'.format(label, x))
+            if game.year <= 0:
+                print('  (Severe crop damage due to seven year locusts.)')
             print('')
 
         # Test for end game
@@ -108,6 +121,15 @@ def dukedom():
                   'You are deposed.\n')
             break
 
+
+        # We start off in game year 0 for the first report. This is presumably to show continuity with
+        # whoever was running the dukedom before, and add history to the game world.
+        game.year = game.year + 1
+        report.record('Peasants at start', game.peasants)
+        report.record('Grain at start',    game.grain)
+        report.record('Land at start',     game.land)
+        report.reset()
+
         # Feed the peasants
         @validate_input
         def valid_food(x):
@@ -118,7 +140,7 @@ def dukedom():
         report.record('Used for food', -food)
 
         # Buy and sell land
-        bid = round(2 * game.cyield + distributions.random(1) - 5)
+        bid = round(2 * game.crop_yield + distributions.random(1) - 5)
         @validate_input
         def valid_buy(x):
             if (x * bid) > game.grain:
@@ -131,6 +153,8 @@ def dukedom():
                 if x > game.land:
                     raise NotEnoughLand(game.land)
                 if (x * offer) > 4000:
+                    # You cannot sell more than 4000 HL worth of land in any one year.
+                    # That's all the grain available to pay you with.
                     raise Overfill()
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
             game.land  -= sold
@@ -143,7 +167,7 @@ def dukedom():
             report.record('Bought/sold', bought)
             report.record('Land deals', -bid * bought)
 
-        # Produce grain
+        # Farm land
         @validate_input
         def valid_farmland(land_to_farm):
             if land_to_farm > game.land:
@@ -155,15 +179,52 @@ def dukedom():
         farmed = prompt_int('Land to be planted = ', valid_farmland)
         seeding = -(farmed * 2)
         game.grain += seeding
-        game.cyield = distributions.random(2) + 9
-        print('Yield = {} HL/HA.'.format(game.cyield))
         report.record('Seeding', seeding)
 
-        # Advance a year
-        game.year  += 1
-        crops = game.cyield * farmed
-        game.grain += crops
-        report.record('Crop yield', crops)
+        # Harvest
+        game.crop_yield = distributions.random(2) + 9
+        if (game.year % 7) == 0:
+            # Field grain is eaten by seven year locusts. They eat half of all your crop
+            # in the years that they appear.
+            print('Seven year locusts.')
+            game.crop_yield = round(game.crop_yield * 0.65) # Hmm, not really half...
+        print('Yield = {} HL/HA.'.format(game.crop_yield))
+
+        harvest = game.crop_yield * farmed
+
+        crop_hazards = distributions.random(3) + 3
+        print(crop_hazards)
+        if crop_hazards > 9:
+            # Sometimes the rats get into the granary and eat up to 10% or so of your
+            # reserve grain. Rats never eat field grain.
+            eaten = round((crop_hazards * game.grain) / 83)
+            print('Rats infest the grainery')
+            game.grain -= eaten
+            report.record('Rat losses', -eaten)
+
+            if game.peasants > 66:
+                levy = distributions.random(4)
+                print(levy)
+                if levy < (game.peasants / 30):
+                    # Occasionally rats will eat so much of the High King's grain that some of his
+                    # workers starve to death. When this happens, the King will require some
+                    # peasants from each of his Dukes as replacements. You may supply them as
+                    # requested or pay an alternate amount of grain.
+                    or_grain    = levy * 100
+                    msg = textwrap.dedent('''
+                        The king requires {} peasants for
+                        his estate and mines. Will you supply
+                        them? (Y)es or pay {} HL. of
+                        grain instead (N)o?''').format(levy, or_grain).lstrip()
+                    if prompt_key(msg, 'yn') == 'n':
+                        game.grain -= or_grain
+                        report.record('Castle expense', -or_grain)
+                    else:
+                        game.peasants -= levy
+                        report.record('King\'s levy', -levy)
+
+        game.grain += harvest
+        report.record('Crop yield', harvest)
 
         # population mechanics
         starved = 0
@@ -260,7 +321,9 @@ class Gaussian:
         self.means = [None] * 8
         self.means[0] = self._gauss(6.0, 1.0, 4, 8)
         self.means[1] = self._gauss(6.5, 1.1, 4, 9)
-        self.means[7] = self._gauss(5.0, 2.0, 1, 9)
+        self.means[2] = self._gauss(5.5, 0.9, 4, 7) # Chance of crop_hazards
+        self.means[3] = self._gauss(5.0, 1.1, 3, 7) # Chance of king's levy
+        self.means[7] = self._gauss(5.0, 2.0, 1, 9) # Births
 
     def _gauss(self, mean, dev, a, b):
         return min(b, max(a, int(round(random.gauss(mean, dev)))))
