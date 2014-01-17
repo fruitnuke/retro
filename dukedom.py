@@ -86,6 +86,7 @@ class GameState:
         self.year     = 0
         self.crop_yield    = 3.95
         self.cool_down = 0
+        self.rebellion = 0 # positive is dissatisfaction, negative - satisfaction. at >88 you will be deposed.
 
 
 def dukedom():
@@ -110,17 +111,11 @@ def dukedom():
             print('')
 
         # Test for end game
-        if game.peasants < 33:
-            print('You have so few peasants left that\n'
-                  'the High King has abolished your Ducal\n'
-                  'right.\n')
-            break
         if game.land <= 199:
             print('You have so little land left that\n'
                   'the peasants are tired of war and starvation.\n'
                   'You are deposed.\n')
             break
-
 
         # We start off in game year 0 for the first report. This is presumably to show continuity with
         # whoever was running the dukedom before, and add history to the game world.
@@ -138,6 +133,27 @@ def dukedom():
         food = prompt_int('Grain for food = ', valid_food)
         game.grain -= food
         report.record('Used for food', -food)
+
+        starved = 0
+        overfed = 0
+        food_per_capita = int(food / game.peasants)
+        if food_per_capita < 13:
+            starved = game.peasants - int(food / 13)
+            game.peasants  -= starved
+            print('Some peasants have starved')
+            report.record('Starvations', -starved)
+        overfed = min(4, food_per_capita - 14)
+        game.rebellion += (3 * starved) - (2 * overfed)
+
+        if game.rebellion > 88:
+            print('The peasants are tired of war and starvation.\n'
+                  'You are deposed.\n')
+            break
+        elif game.peasants < 33:
+            print('You have so few peasants left that\n'
+                  'the High King has abolished your Ducal\n'
+                  'right.\n')
+            break
 
         # Buy and sell land
         bid = round(2 * game.crop_yield + distributions.random(1) - 5)
@@ -192,8 +208,8 @@ def dukedom():
 
         harvest = game.crop_yield * farmed
 
+        # Bad luck
         crop_hazards = distributions.random(3) + 3
-        print(crop_hazards)
         if crop_hazards > 9:
             # Sometimes the rats get into the granary and eat up to 10% or so of your
             # reserve grain. Rats never eat field grain.
@@ -204,7 +220,6 @@ def dukedom():
 
             if game.peasants > 66:
                 levy = distributions.random(4)
-                print(levy)
                 if levy < (game.peasants / 30):
                     # Occasionally rats will eat so much of the High King's grain that some of his
                     # workers starve to death. When this happens, the King will require some
@@ -226,14 +241,7 @@ def dukedom():
         game.grain += harvest
         report.record('Crop yield', harvest)
 
-        # population mechanics
-        starved = 0
-        if int(food / game.peasants) < 13:
-            print('Some peasants have starved.')
-            starved = -round(game.peasants - food / 13)
-            game.peasants += starved
-        report.record('Starvations', starved)
-
+        # demographics
         deaths = 0
         chance_of_outbreak = distributions.random(8) + 1
         game.cool_down -= 1
