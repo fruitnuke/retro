@@ -91,7 +91,7 @@ class GameState:
         self.crop_yield    = 3.95
         self.cool_down = 0
         self.rebellion = 0 # positive is dissatisfaction, negative - satisfaction. at >88 you will be deposed.
-        self.landx = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
+        self.buckets = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
 
 def dukedom():
@@ -123,7 +123,7 @@ def dukedom():
             group(stats, 7)
             group(stats, 3)
             print('  100%  80%  60%  40%  20%  Depl')
-            print(('  ' + '{:>5}'*6).format(*game.landx), '\n')
+            print(('  ' + '{:>5}'*6).format(*game.buckets), '\n')
             group(stats, 8)
             if game.year <= 0:
                 print('(Severe crop damage due to seven year locusts.)\n')
@@ -149,12 +149,20 @@ def dukedom():
             if x > game.grain:
                 raise NotEnoughGrain(game.grain)
         food = prompt_int('Grain for food = ', valid_food)
+
+        # User can enter a number under 100 which represents food per peasant to give,
+        # or a number over 100 which represents the total amount of food to give.
+        if food > 100:
+            food_per_capita = int(food / game.peasants)
+        else:
+            food_per_capita = food
+            food = food * peasants
+
         game.grain -= food
         report.record('Used for food', -food)
 
         starved = 0
         overfed = 0
-        food_per_capita = int(food / game.peasants)
         if food_per_capita < 13:
             starved = game.peasants - int(food / 13)
             game.peasants  -= starved
@@ -185,7 +193,7 @@ def dukedom():
 
         if bought == 0:
             offer    = bid - 1
-            sellable = sum(game.landx[:3])
+            sellable = sum(game.buckets[:3])
 
             @validate_input
             def valid_sell(x):
@@ -204,9 +212,9 @@ def dukedom():
             i = 3
             while left > 0:
                 i -= 1
-                x = min(left, game.landx[i])
+                x = min(left, game.buckets[i])
                 left -= x
-                game.landx[i] -= x
+                game.buckets[i] -= x
             assert(i >= 0)
 
             game.grain += offer * sold
@@ -214,7 +222,7 @@ def dukedom():
             report.record('Land deals', offer * sold)
         else:
             game.land     += bought
-            game.landx[2] += bought
+            game.buckets[2] += bought
             game.grain    -= bid * bought
             report.record('Bought/sold', bought)
             report.record('Land deals', -bid * bought)
@@ -247,8 +255,8 @@ def dukedom():
                 amount = max(amount - x, 0)
                 yield x
 
-        sown     = list(allocate(game.landx, farmed))
-        fallow   = [a - b for a, b in zip(game.landx, sown)]
+        sown     = list(allocate(game.buckets, farmed))
+        fallow   = [a - b for a, b in zip(game.buckets, sown)]
         weighted = sum(area * (1.0 - (0.2 * i)) for i, area in enumerate(sown[:5]))
         avg      = round(yld * (weighted / farmed) * 100) / 100
         game.crop_yield = avg
@@ -256,7 +264,7 @@ def dukedom():
 
         depletion  = [0] + sown[:4] + [sum(sown[4:])]
         nutrition  = [sum(fallow[:3])] + fallow[3:] + [0, 0]
-        game.landx = [a + b for a, b in zip(depletion, nutrition)]
+        game.buckets = [a + b for a, b in zip(depletion, nutrition)]
 
         # Crop losses
         crop_hazards = distributions.random(3) + 3
