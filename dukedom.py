@@ -17,13 +17,12 @@ Differences from the original
 -----------------------------
 - Although the instructions in Big Computer Games states that a peasant can care for no more than 4
   hectares of land (when it comes to planting seed), this mechanic does not actually appear to be implmented
-  in the BASIC version.
+  in the BASIC version (it has the text, but not the check).
 - The BASIC version includes a "partially Gaussian random #" generator, which uses a uniform random number
   generator to produce numbers with a probability density function that (seems to very loosely) approximate
   that of a normal function. Python has a (couple of) random number generator(s) with normal distribution built
   in so I just use that. Then it's just working out the mean and standard deviation for each bell curve that Talbot
   intended.
-- I removed the 'peasants from end' stat, as it's always the same as 'peasants' which is printed each turn anyway.
 
 TODO
 ----
@@ -92,6 +91,7 @@ class GameState:
         self.crop_yield    = 3.95
         self.cool_down = 0
         self.rebellion = 0 # positive is dissatisfaction, negative - satisfaction. at >88 you will be deposed.
+        self.landx = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
 
 def dukedom():
@@ -113,18 +113,23 @@ def dukedom():
 
         print('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain))
         if show_report:
-            stats = iter(report)
-            for n in [7, 3, 8]:
+            def group(it, n):
                 for _ in range(n):
-                    label, x = next(stats)
+                    label, x = next(it)
                     if x:
                         print('  {:<22}{}'.format(label, x))
                 print('')
+            stats = iter(report)
+            group(stats, 7)
+            group(stats, 3)
+            print('  100%  80%  60%  40%  20%  Depl')
+            print(('  ' + '{:>5}'*6).format(*game.landx), '\n')
+            group(stats, 8)
             if game.year <= 0:
-                print('  (Severe crop damage due to seven year locusts.)\n')
+                print('(Severe crop damage due to seven year locusts.)\n')
 
         # Test for end game
-        if game.land <= 199:
+        if game.land < 200:
             print('You have so little land left that\n'
                   'the peasants are tired of war and starvation.\n'
                   'You are deposed.\n')
@@ -170,29 +175,47 @@ def dukedom():
 
         # Buy and sell land
         bid = round(2 * game.crop_yield + distributions.random(1) - 5)
+
         @validate_input
         def valid_buy(x):
             if (x * bid) > game.grain:
                 raise NotEnoughGrain(game.grain)
+
         bought = prompt_int('Land to buy at {0} HL./HA. = '.format(bid), valid_buy)
+
         if bought == 0:
-            offer = bid - 1
+            offer    = bid - 1
+            sellable = sum(game.landx[:3])
+
             @validate_input
             def valid_sell(x):
-                if x > game.land:
-                    raise NotEnoughLand(game.land)
+                if x > sellable:
+                    raise NotEnoughGoodLand(sellable)
                 if (x * offer) > 4000:
                     # You cannot sell more than 4000 HL worth of land in any one year.
                     # That's all the grain available to pay you with.
                     raise Overfill()
+
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
             game.land  -= sold
+
+            # allocate sold land from good land starting at 60% and working up to 100% land
+            left = sold
+            i = 3
+            while left > 0:
+                i -= 1
+                x = min(left, game.landx[i])
+                left -= x
+                game.landx[i] -= x
+            assert(i >= 0)
+
             game.grain += offer * sold
             report.record('Bought/sold', -sold)
             report.record('Land deals', offer * sold)
         else:
-            game.land  += bought
-            game.grain -= bid * bought
+            game.land     += bought
+            game.landx[2] += bought
+            game.grain    -= bid * bought
             report.record('Bought/sold', bought)
             report.record('Land deals', -bid * bought)
 
@@ -210,18 +233,32 @@ def dukedom():
         game.grain += seeding
         report.record('Seeding', seeding)
 
-        # Harvest
-        game.crop_yield = distributions.random(2) + 9
+        # Crop gains
+        yld = distributions.random(2) + 9
         if (game.year % 7) == 0:
             # Field grain is eaten by seven year locusts. They eat half of all your crop
             # in the years that they appear.
             print('Seven year locusts.')
-            game.crop_yield = round(game.crop_yield * 0.65) # Hmm, not really half...
-        print('Yield = {} HL/HA.'.format(game.crop_yield))
+            yld = round(yld * 0.65) # Hmm, not really half...
 
-        harvest = game.crop_yield * farmed
+        def allocate(buckets, amount):
+            for bucket in buckets:
+                x = min(amount, bucket)
+                amount = max(amount - x, 0)
+                yield x
 
-        # Bad luck
+        sown     = list(allocate(game.landx, farmed))
+        fallow   = [a - b for a, b in zip(game.landx, sown)]
+        weighted = sum(area * (1.0 - (0.2 * i)) for i, area in enumerate(sown[:5]))
+        avg      = round(yld * (weighted / farmed) * 100) / 100
+        game.crop_yield = avg
+        print('Yield = {} HL/HA.'.format(avg))
+
+        depletion  = [0] + sown[:4] + [sum(sown[4:])]
+        nutrition  = [sum(fallow[:3])] + fallow[3:] + [0, 0]
+        game.landx = [a + b for a, b in zip(depletion, nutrition)]
+
+        # Crop losses
         crop_hazards = distributions.random(3) + 3
         if crop_hazards > 9:
             # Sometimes the rats get into the granary and eat up to 10% or so of your
@@ -251,6 +288,7 @@ def dukedom():
                         game.peasants -= levy
                         report.record('King\'s levy', -levy)
 
+        harvest = round(avg * farmed)
         game.grain += harvest
         report.record('Crop yield', harvest)
 
@@ -322,6 +360,12 @@ class NotEnoughLand(InvalidInput):
 
     def __init__(self, land):
         super().__init__('But you don\'t have enough land.\nYou only have {} HA. of land left.'.format(land))
+
+
+class NotEnoughGoodLand(InvalidInput):
+
+    def __init__(self, good_land):
+        super().__init__('But you only have {} HA. of good land.'.format(good_land))
 
 
 class NotEnoughWorkers(InvalidInput):
