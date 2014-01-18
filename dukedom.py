@@ -47,21 +47,26 @@ class GameReport:
 
     def __init__(self):
         self._data = collections.OrderedDict([
-            ('Peasants at start', 96  ),
-            ('Starvations',       0   ),
-            ('King\'s levy',      0   ),
-            ('Disease victims',   0   ),
-            ('Natural deaths',   -4   ),
-            ('Births',            8   ),
-            ('Land at start',     600 ),
-            ('Bought/sold',       0   ),
-            ('Grain at start',    5193),
-            ('Used for food',    -1344),
-            ('Land deals',        0   ),
-            ('Seeding',          -768 ),
-            ('Rat losses',        0   ),
-            ('Crop yield',        1516),
-            ('Castle expense',   -120 )])
+            ('Peasants at start',    96  ),
+            ('Starvations',          0   ),
+            ('King\'s levy',         0   ),
+            ('Disease victims',      0   ),
+            ('Natural deaths',      -4   ),
+            ('Births',               8   ),
+            ('Peasants at end',      100 ),
+
+            ('Land at start',        600 ),
+            ('Bought/sold',          0   ),
+            ('Land at end of year',  600 ),
+
+            ('Grain at start',       5193),
+            ('Used for food',       -1344),
+            ('Land deals',           0   ),
+            ('Seeding',             -768 ),
+            ('Rat losses',           0   ),
+            ('Crop yield',           1516),
+            ('Castle expense',      -120 ),
+            ('Grain at end of year', 4177)])
 
     def record(self, stat, x):
         self._data[stat] = x
@@ -101,14 +106,22 @@ def dukedom():
     game   = GameState()
 
     while True:
+
+        report.record('Peasants at end',      game.peasants)
+        report.record('Land at end of year',  game.land)
+        report.record('Grain at end of year', game.grain)
+
         print('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain))
         if show_report:
-            for label, x in report:
-                if x != 0:
-                    print('  {:<20}{}'.format(label, x))
+            stats = iter(report)
+            for n in [7, 3, 8]:
+                for _ in range(n):
+                    label, x = next(stats)
+                    if x:
+                        print('  {:<22}{}'.format(label, x))
+                print('')
             if game.year <= 0:
-                print('  (Severe crop damage due to seven year locusts.)')
-            print('')
+                print('  (Severe crop damage due to seven year locusts.)\n')
 
         # Test for end game
         if game.land <= 199:
@@ -255,11 +268,11 @@ def dukedom():
         game.peasants += deaths
         report.record('Disease victims', deaths)
 
-        natural = int(0.3 - game.peasants / 22)
+        natural = round(0.3 - game.peasants / 22)
         report.record('Natural deaths', natural)
         deaths += natural
 
-        births = int(round(game.peasants / (distributions.random(8) + 4)))
+        births = round(game.peasants / (distributions.random(8) + 4))
         report.record('Births', births)
         game.peasants += births + deaths
 
