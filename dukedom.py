@@ -31,13 +31,18 @@ TODO
 '''
 
 import collections
+from   itertools import chain
 import random
 import textwrap
 
 
 def main():
+    print('')
+    print('D U K E D O M')
+    print('')
+    show_report = prompt_key('Do you want to skip detailed reports?', 'yn') == 'n'
     while True:
-        dukedom()
+        dukedom(show_report)
         if prompt_key('Do you wish to play again?', 'yn') == 'n':
             break
 
@@ -94,13 +99,7 @@ class GameState:
         self.buckets = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
 
-def dukedom():
-    print('')
-    print('D U K E D O M')
-    print('')
-
-    show_report = prompt_key('Do you want to skip detailed reports?', 'yn') == 'n'
-
+def dukedom(show_report):
     distributions = Gaussian()  # Talbot()
     report = GameReport()
     game   = GameState()
@@ -146,8 +145,12 @@ def dukedom():
         # Feed the peasants
         @validate_input
         def valid_food(x):
-            if x > game.grain:
+            if x > 100:
+                if x > game.grain:
+                    raise NotEnoughGrain(game.grain)
+            elif (x * game.peasants) > game.grain:
                 raise NotEnoughGrain(game.grain)
+
         food = prompt_int('Grain for food = ', valid_food)
 
         # User can enter a number under 100 which represents food per peasant to give,
@@ -156,7 +159,7 @@ def dukedom():
             food_per_capita = int(food / game.peasants)
         else:
             food_per_capita = food
-            food = food * peasants
+            food = food * game.peasants
 
         game.grain -= food
         report.record('Used for food', -food)
@@ -205,21 +208,16 @@ def dukedom():
                     raise Overfill()
 
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
-            game.land  -= sold
+            if sold:
+                game.land  -= sold
 
-            # allocate sold land from good land starting at 60% and working up to 100% land
-            left = sold
-            i = 3
-            while left > 0:
-                i -= 1
-                x = min(left, game.buckets[i])
-                left -= x
-                game.buckets[i] -= x
-            assert(i >= 0)
+                # allocate sold land from good land starting at 60% and working up to 100% land
+                sold_buckets = list(reversed(list(allocate(reversed(game.buckets[:3]), sold))))
+                game.buckets = [a - b for a, b in zip(game.buckets, chain(sold_buckets, [0, 0, 0]))]
 
-            game.grain += offer * sold
-            report.record('Bought/sold', -sold)
-            report.record('Land deals', offer * sold)
+                game.grain += offer * sold
+                report.record('Bought/sold', -sold)
+                report.record('Land deals', offer * sold)
         else:
             game.land     += bought
             game.buckets[2] += bought
@@ -249,18 +247,15 @@ def dukedom():
             print('Seven year locusts.')
             yld = round(yld * 0.65) # Hmm, not really half...
 
-        def allocate(buckets, amount):
-            for bucket in buckets:
-                x = min(amount, bucket)
-                amount = max(amount - x, 0)
-                yield x
-
         sown     = list(allocate(game.buckets, farmed))
         fallow   = [a - b for a, b in zip(game.buckets, sown)]
         weighted = sum(area * (1.0 - (0.2 * i)) for i, area in enumerate(sown[:5]))
-        avg      = round(yld * (weighted / farmed) * 100) / 100
-        game.crop_yield = avg
-        print('Yield = {} HL/HA.'.format(avg))
+        if farmed > 0:
+            game.crop_yield = round(yld * (weighted / farmed) * 100) / 100
+        else: # avoid division by zero
+            game.crop_yield = 0
+
+        print('Yield = {} HL/HA.'.format(game.crop_yield))
 
         depletion  = [0] + sown[:4] + [sum(sown[4:])]
         nutrition  = [sum(fallow[:3])] + fallow[3:] + [0, 0]
@@ -296,7 +291,7 @@ def dukedom():
                         game.peasants -= levy
                         report.record('King\'s levy', -levy)
 
-        harvest = round(avg * farmed)
+        harvest = round(game.crop_yield * farmed)
         game.grain += harvest
         report.record('Crop yield', harvest)
 
@@ -322,6 +317,12 @@ def dukedom():
         report.record('Births', births)
         game.peasants += births + deaths
 
+
+def allocate(buckets, amount):
+    for bucket in buckets:
+        x = min(amount, bucket)
+        amount = max(amount - x, 0)
+        yield x
 
 
 def validate_input(validf):
