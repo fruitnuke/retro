@@ -15,14 +15,23 @@ Instructions
 
 Differences from the original
 -----------------------------
+
 - Although the instructions in Big Computer Games states that a peasant can care for no more than 4
   hectares of land (when it comes to planting seed), this mechanic does not actually appear to be implmented
   in the BASIC version (it has the text, but not the check).
+
 - The BASIC version includes a "partially Gaussian random #" generator, which uses a uniform random number
   generator to produce numbers with a probability density function that (seems to very loosely) approximate
   that of a normal function. Python has a (couple of) random number generator(s) with normal distribution built
   in so I just use that. Then it's just working out the mean and standard deviation for each bell curve that Talbot
   intended.
+
+- Instructions for original claim 'yield for fallow land is calculated each year at random (variances in the weather)
+  and ranges from 4 to 13 hectoliters for each hectare planted.' In fact the code shows that it uses a pdf with a mean
+  between 4 and 9, and range of -2 to 3, giving a potential random number range of 2 to 12. The game then adds 9 to that
+  number giving a yield range of 11 to 21 for fallow land! [C=FNX%(2)+9]
+
+- Instructions claim seven year locusts eat half the field grain, but in the BASIC code it's actually 35%. [C=INT(C*.65)]
 
 TODO
 ----
@@ -54,6 +63,8 @@ class GameReport:
             ('Peasants at start',    96  ),
             ('Starvations',          0   ),
             ('King\'s levy',         0   ),
+            ('War casualties',       0   ),
+            ('Looting victims',      0   ),
             ('Disease victims',      0   ),
             ('Natural deaths',      -4   ),
             ('Births',               8   ),
@@ -76,7 +87,8 @@ class GameReport:
         self._data[stat] = x
 
     ZERO_EACH_YEAR = ['Starvations', 'King\'s Levy', 'Disease victims', 'Bought/sold',
-                      'Land deals', 'Rat losses', 'Castle expense']
+                      'Land deals', 'Rat losses', 'Castle expense', 'War casualties',
+                      'Looting victims']
 
     def reset(self):
         for x in self.ZERO_EACH_YEAR:
@@ -119,7 +131,7 @@ def dukedom(show_report):
                         print('  {:<22}{}'.format(label, x))
                 print('')
             stats = iter(report)
-            group(stats, 7)
+            group(stats, 9)
             group(stats, 3)
             print('  100%  80%  60%  40%  20%  Depl')
             print(('  ' + '{:>5}'*6).format(*game.buckets), '\n')
@@ -295,6 +307,20 @@ def dukedom(show_report):
         game.grain += harvest
         report.record('Crop yield', harvest)
 
+        war_roll    = distributions.random(5)
+        desperation = max(2, round(11 - 1.5 * game.crop_yield)) # once (avg) crop yield gets below 6 the chance of war increases.
+
+        if war_roll <= desperation:
+            print('A nearby Duke threatens war:')
+            first_strike = prompt_key('Will you attack first? ', 'yn') == 'y'
+            res = war(war_roll, first_strike, distributions.random(6), game.peasants, game.rebellion)
+            if res['outcome'] == 'peace':
+                print('Peace negotiations successful')
+
+            game.rebellion += res['disatisfaction']
+            game.peasants  -= res['casualties']
+            report.record('War casualties', -res['casualties'])
+
         # demographics
         deaths = 0
         chance_of_outbreak = distributions.random(8) + 1
@@ -316,6 +342,20 @@ def dukedom(show_report):
         births = round(game.peasants / (distributions.random(8) + 4))
         report.record('Births', births)
         game.peasants += births + deaths
+
+
+def war(desperation, first_strike, enemy_strength, pop, dissatisfaction):
+    enemy  = 85 + 18 * enemy_strength
+    spirit = 1.2 - dissatisfaction / 16
+    duchy  = round(pop * spirit) + 13
+    if not first_strike and enemy < duchy:
+        casualties = desperation + 1
+        return {'outcome'       : 'peace',
+                'casualties'    :  casualties,
+                'disatisfaction':  casualties * 2}
+    return {'outcome'       : 'war',
+            'casualties'    : 0,
+            'disatisfaction': 0}
 
 
 def allocate(buckets, amount):
@@ -393,11 +433,13 @@ class Gaussian:
 
     def __init__(self):
         self.means = [None] * 8
-        self.means[0] = self._gauss(6.0, 1.0, 4, 8)
-        self.means[1] = self._gauss(6.5, 1.1, 4, 9)
-        self.means[2] = self._gauss(5.5, 0.9, 4, 7) # Chance of crop_hazards
-        self.means[3] = self._gauss(5.0, 1.1, 3, 7) # Chance of king's levy
-        self.means[7] = self._gauss(5.0, 2.0, 1, 9) # Births
+        self.means[0] = self._gauss(6.0, 1.0,  4, 8)
+        self.means[1] = self._gauss(6.5, 1.1,  4, 9)
+        self.means[2] = self._gauss(5.5, 0.9,  4, 7) # Chance of crop hazards
+        self.means[3] = self._gauss(5.0, 1.1,  3, 7) # Chance of king's levy
+        self.means[4] = self._gauss(6.0, 0.41, 5, 7) # Chance of war
+        self.means[5] = self._gauss(5.0, 1.1,  3, 7) # Attacker's strength
+        self.means[7] = self._gauss(5.0, 2.0,  1, 9) # Births
 
     def _gauss(self, mean, dev, a, b):
         return min(b, max(a, int(round(random.gauss(mean, dev)))))
