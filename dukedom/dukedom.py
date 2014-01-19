@@ -33,6 +33,10 @@ Differences from the original
 
 - Instructions claim seven year locusts eat half the field grain, but in the BASIC code it's actually 35%. [C=INT(C*.65)]
 
+- Instructions claim 'A mercenary is worth about 8 peasants in fighting power', but from the code it actually seems
+  to be worth 7.
+
+
 TODO
 ----
 - Check the land price probability distribution / calc, it's way off.
@@ -72,6 +76,7 @@ class GameReport:
 
             ('Land at start',        600 ),
             ('Bought/sold',          0   ),
+            ('Fruits of war',        0   ),
             ('Land at end of year',  600 ),
 
             ('Grain at start',       5193),
@@ -79,6 +84,8 @@ class GameReport:
             ('Land deals',           0   ),
             ('Seeding',             -768 ),
             ('Rat losses',           0   ),
+            ('Mercenary hire',       0   ),
+            ('Loot from war',        0   ),
             ('Crop yield',           1516),
             ('Castle expense',      -120 ),
             ('Grain at end of year', 4177)])
@@ -88,7 +95,7 @@ class GameReport:
 
     ZERO_EACH_YEAR = ['Starvations', 'King\'s Levy', 'Disease victims', 'Bought/sold',
                       'Land deals', 'Rat losses', 'Castle expense', 'War casualties',
-                      'Looting victims']
+                      'Looting victims', 'Fruits of war']
 
     def reset(self):
         for x in self.ZERO_EACH_YEAR:
@@ -132,10 +139,10 @@ def dukedom(show_report):
                 print('')
             stats = iter(report)
             group(stats, 9)
-            group(stats, 3)
+            group(stats, 4)
             print('  100%  80%  60%  40%  20%  Depl')
             print(('  ' + '{:>5}'*6).format(*game.buckets), '\n')
-            group(stats, 8)
+            group(stats, 10)
             if game.year <= 0:
                 print('(Severe crop damage due to seven year locusts.)\n')
 
@@ -217,7 +224,7 @@ def dukedom(show_report):
                 if (x * offer) > 4000:
                     # You cannot sell more than 4000 HL worth of land in any one year.
                     # That's all the grain available to pay you with.
-                    raise Overfill()
+                    raise Overfill('No buyers have that much grain, try less')
 
             sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
             if sold:
@@ -307,19 +314,51 @@ def dukedom(show_report):
         game.grain += harvest
         report.record('Crop yield', harvest)
 
-        war_roll    = distributions.random(5)
-        desperation = max(2, round(11 - 1.5 * game.crop_yield)) # once (avg) crop yield gets below 6 the chance of war increases.
-
-        if war_roll <= desperation:
+        enemy_desperation = max(2, round(11 - 1.5 * game.crop_yield)) # once (avg) crop yield gets below 6 the chance of war increases.
+        roll = distributions.random(5)
+        if roll <= enemy_desperation:
             print('A nearby Duke threatens war:')
-            first_strike = prompt_key('Will you attack first? ', 'yn') == 'y'
-            res = war(war_roll, first_strike, distributions.random(6), game.peasants, game.rebellion)
-            if res['outcome'] == 'peace':
-                print('Peace negotiations successful')
+            war = War(game.peasants, game.rebellion, distributions)
 
-            game.rebellion += res['disatisfaction']
-            game.peasants  -= res['casualties']
-            report.record('War casualties', -res['casualties'])
+            if prompt_key('Will you attack first?', 'yn') == 'y':
+                if war.first_strike(enemy_desperation, roll):
+                    print('Peace negotiations successful')
+                else:
+                    print('First strike failed - you need professionals')
+
+                game.peasants -= war.casualties
+
+            if not war.over:
+                # Note that this is the one point in the game you can go into 'credit'. You can hire
+                # more mercenaries than you have grain to pay, on the assumption that you will win the
+                # war and be able to pay them from the loot. If you don't, and you can't, then the
+                # mercenaries will extract their pay by looting your villages and land.
+                @validate_input
+                def valid_mercs(x):
+                    if x > 75:
+                        raise Overfill('There are only 75 available for hire.')
+                mercs = prompt_int('How many mercenaries will you hire at 40HL. each? ', valid_mercs)
+
+                if war.attack(mercs):
+                    print('You have won the war.')
+                else:
+                    print('You have lost the war.')
+
+                war.pay_mercenaries(mercs)
+
+                if war.casualties > game.peasants:
+                    war.casualties = game.peasants
+                game.peasants -= war.casualties
+
+            game.rebellion += war.resentment
+            game.grain     += war.grain_loot # can be used to pay the mercenaries
+            game.land      += war.annexed
+
+            report.record('War casualties', -war.casualties)
+            report.record('Fruits of war',   war.annexed)
+            report.record('Loot from war',   war.grain_loot)
+            report.record('Mercenary hire',  war.mercenary_cost)
+            report.record('Crop yield',      harvest + war.extra_harvest) # cannot be used to pay the mercenaries
 
         # demographics
         deaths = 0
@@ -344,18 +383,55 @@ def dukedom(show_report):
         game.peasants += births + deaths
 
 
-def war(desperation, first_strike, enemy_strength, pop, dissatisfaction):
-    enemy  = 85 + 18 * enemy_strength
-    spirit = 1.2 - dissatisfaction / 16
-    duchy  = round(pop * spirit) + 13
-    if not first_strike and enemy < duchy:
-        casualties = desperation + 1
-        return {'outcome'       : 'peace',
-                'casualties'    :  casualties,
-                'disatisfaction':  casualties * 2}
-    return {'outcome'       : 'war',
-            'casualties'    : 0,
-            'disatisfaction': 0}
+class War:
+
+    def __init__(self, pop, resentment, luck):
+        self.casualties = 0
+        self.resentment = 0
+        self.annexed    = 0
+        self.grain_loot = 0
+        self.extra_harvest  = 0
+        self.mercenary_cost = 0
+        self.over = False
+
+        self._fighting_spirit = 1.2 - resentment / 16
+        self._starting_pop    = pop
+        self.duchy_strength = self._base_strength()
+        self.enemy_strength = 85 + 18 * luck.random(6)
+
+    def _base_strength(self):
+        pop = self._starting_pop - self.casualties
+        return round(pop * self._fighting_spirit) + 13
+
+    def first_strike(self, roll, enemy_desperation):
+        if self.enemy_strength > self.duchy_strength:
+            self.casualties = roll + enemy_desperation + 2
+            self.enemy_strengh += 3 * self.casualties
+            return False
+        else:
+            self.casualties = enemy_desperation + 1
+            self.resentment = 2 * self.casualties
+            self.over = True
+            return True
+
+    def attack(self, mercs):
+        self.enemy_strength = round(self.enemy_strength * 1.95) # enemy has hired mercenaries
+        self.duchy_strength = self._base_strength() + (7 * mercs)
+        dead = self.enemy_strength - (4 * mercs) - round(0.25 * self.duchy_strength)
+        balance_of_power = self.duchy_strength - self.enemy_strength
+        self.annexed = round(balance_of_power * 0.8)
+
+        if balance_of_power > 0:
+            self.casualties = round(dead / 10)
+            self.grain_loot = round(self.annexed * 1.7)
+            self.extra_harvest = round(0.67 * self.annexed)
+            self.mercenary_cost = 40 * mercs
+            return True
+        else:
+            return False
+
+    def pay_mercenaries(self, mercs):
+        pass
 
 
 def allocate(buckets, amount):
@@ -425,8 +501,8 @@ class NotEnoughWorkers(InvalidInput):
 
 class Overfill(InvalidInput):
 
-    def __init__(self):
-        super().__init__('No buyers have that much grain, try less')
+    def __init__(self, msg):
+        super().__init__(msg)
 
 
 class Gaussian:
