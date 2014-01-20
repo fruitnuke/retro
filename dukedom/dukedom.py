@@ -317,11 +317,14 @@ def dukedom(show_report):
         # war
         print('A nearby Duke threatens war.')
         mod = distributions.random(6)
-        won = War().campaign(mod, game.peasants, game.rebellion)
+        war = War()
+        won = war.campaign(mod, game.peasants, game.rebellion)
         if won:
             print('You have won the war.')
         else:
             print('You have lost the war.')
+        game.peasants -= war.casualties
+        report.record('War casualties', -war.casualties)
 
         # demographics
         deaths = 0
@@ -348,6 +351,9 @@ def dukedom(show_report):
 
 class War:
 
+    def __init__(self):
+        self.casualties = 0
+
     def campaign(self, enemy_modifier, population, resentment):
         """Fight the war.
 
@@ -356,10 +362,14 @@ class War:
             - enemy_modifier: a random integer in the range [1, 9], is a proxy for enemy strength / size.
             - population: The number of peasants in your duchy.
             - resentment: an integer that gives the level of resentment against you by your peasants.
+
+        Returns True if the campaign was won, False otherwise. Sets self.casualties with the total number
+        of casualties since the war started.
         """
         fighting_spirit = 1.2 - (resentment / 16.0)
         away = enemy_modifier * 18 + 85                 # will be in [103, 121, 139, 157, 175, 193, 211, 229, 247]
         home = round(population * fighting_spirit) + 13 # starting pop of 100 gives 133
+        self.casualties = round((away - round(home * 0.25)) / 10)
         return home > away
 
 

@@ -20,7 +20,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(list(dukedom.allocate([10, 10, 10], 29)), [10, 10, 9 ])
 
 
-class TestWar(unittest.TestCase):
+class WarTests(unittest.TestCase):
 
 
     def test_outcome(self):
@@ -37,7 +37,7 @@ class TestWar(unittest.TestCase):
                 else:
                     self.assertTrue(won, '{} {}'.format(enemy_modifier, population))
 
-    def test_resentment_affects_outcome(self):
+    def test_effect_of_resentment(self):
         """Test the outcome of war along the third dimension - civilian resentment."""
         enemy_modifier = 5
         population     = 100
@@ -47,7 +47,24 @@ class TestWar(unittest.TestCase):
             expected_victory = resentment <= -7
             self.assertEqual(won, expected_victory)
 
+    def test_casualties(self):
+        expected = [
+            [7, 9, 11, 12, 14, 16, 18, 20, 21],
+            [15, 14, 14, 14, 14, 13], # second 14 should be 15, but because of rounding and float... use decimal?
+            [11, 13, 14, 16, 17, 19]]
 
+        war = dukedom.War()
+        for enemy in range(1, 10):
+            war.campaign(enemy, 100, 0)
+            self.assertEqual(war.casualties, expected[0][enemy-1], msg='enemy {}'.format(enemy))
+
+        for i, pop in enumerate([80, 90, 100, 110, 120, 130]):
+            war.campaign(5, pop, 0)
+            self.assertEqual(war.casualties, expected[1][i], msg='pop {}'.format(pop))
+
+        for i, resentment in enumerate([-20, -10, 0, 10, 20, 30]):
+            war.campaign(5, 100, resentment)
+            self.assertEqual(war.casualties, expected[2][i], msg='resentment {}'.format(resentment))
 
 
 if __name__ == '__main__':
