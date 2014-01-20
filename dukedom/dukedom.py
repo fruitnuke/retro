@@ -314,10 +314,10 @@ def dukedom(show_report):
         game.grain += harvest
         report.record('Crop yield', harvest)
 
+        # war
         print('A nearby Duke threatens war.')
         mod = distributions.random(6)
-        print(mod)
-        won = War().campaign(mod, game.peasants)
+        won = War().campaign(mod, game.peasants, game.rebellion)
         if won:
             print('You have won the war.')
         else:
@@ -348,15 +348,18 @@ def dukedom(show_report):
 
 class War:
 
-    def campaign(self, enemy_modifier, population):
+    def campaign(self, enemy_modifier, population, resentment):
         """Fight the war.
 
         Params:
 
-            - enemy_modifier is a random integer in the range [1, 9].
+            - enemy_modifier: a random integer in the range [1, 9], is a proxy for enemy strength / size.
+            - population: The number of peasants in your duchy.
+            - resentment: an integer that gives the level of resentment against you by your peasants.
         """
-        away = enemy_modifier * 18 + 85     # will be in [103, 121, 139, 157, 175, 193, 211, 229, 247]
-        home = round(population * 1.2) + 13 # starting pop of 100 gives 133
+        fighting_spirit = 1.2 - (resentment / 16.0)
+        away = enemy_modifier * 18 + 85                 # will be in [103, 121, 139, 157, 175, 193, 211, 229, 247]
+        home = round(population * fighting_spirit) + 13 # starting pop of 100 gives 133
         return home > away
 
 
