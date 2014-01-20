@@ -22,35 +22,18 @@ class Tests(unittest.TestCase):
 
 class TestWar(unittest.TestCase):
 
-    def test_war_enemy_strength(self):
-        self.assertEqual(dukedom.war(2, False, 1, 100, 0)['outcome'], 'peace')
-        self.assertEqual(dukedom.war(2, False, 2, 100, 0)['outcome'], 'peace')
-        self.assertEqual(dukedom.war(2, False, 3, 100, 0)['outcome'], 'war')
-        self.assertEqual(dukedom.war(2, False, 9, 100, 0)['outcome'], 'war')
 
-    def test_war_population(self):
-        self.assertEqual(dukedom.war(2, False, 5, 33,  0)['outcome'], 'war')
-        self.assertEqual(dukedom.war(2, False, 5, 135, 0)['outcome'], 'war')
-        self.assertEqual(dukedom.war(2, False, 5, 136, 0)['outcome'], 'peace')
-        self.assertEqual(dukedom.war(2, False, 5, 150, 0)['outcome'], 'peace')
-
-    def test_war_fighting_spirit(self):
-        self.assertEqual(dukedom.war(2, False, 5, 100,  88)['outcome'], 'war')   # max disatisfaction before you get deposed
-        self.assertEqual(dukedom.war(2, False, 5, 100,  0 )['outcome'], 'war')
-        self.assertEqual(dukedom.war(2, False, 5, 100, -6 )['outcome'], 'war')
-        self.assertEqual(dukedom.war(2, False, 5, 100, -7 )['outcome'], 'peace')
-        self.assertEqual(dukedom.war(2, False, 5, 100, -50)['outcome'], 'peace') # hightly supportive, well-fed population
-
-    def test_effect_of_desperation_on_peace_casualties(self):
-        for desperation in range(2, 12):
-            self.assertEqual(dukedom.war(desperation, False, 1, 100, -50)['casualties'], desperation + 1)
-
-    def test_disatisfaction_after_peace_negotiations(self):
-        for desperation in range(2, 12):
-            war = dukedom.war(desperation, False, 1, 100, -50)
-            self.assertEqual(war['disatisfaction'], war['casualties'] * 2)
-
+    def test_outcome(self):
+        war = dukedom.War()
+        winning_populations = [(1,  76), (2,  91), (3, 106), (4, 121), (5, 136),
+                               (6, 151), (7, 166), (8, 181), (9, 196)]
+        for enemy_modifier, threshold in winning_populations:
+            for population in range(33, 200):
+                won = war.campaign(enemy_modifier, population)
+                if population < threshold:
+                    self.assertFalse(won, '{} {}'.format(enemy_modifier, population))
+                else:
+                    self.assertTrue(won, '{} {}'.format(enemy_modifier, population))
 
 if __name__ == '__main__':
     unittest.main()
-

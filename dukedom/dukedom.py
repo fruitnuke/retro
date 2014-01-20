@@ -314,51 +314,14 @@ def dukedom(show_report):
         game.grain += harvest
         report.record('Crop yield', harvest)
 
-        enemy_desperation = max(2, round(11 - 1.5 * game.crop_yield)) # once (avg) crop yield gets below 6 the chance of war increases.
-        roll = distributions.random(5)
-        if roll <= enemy_desperation:
-            print('A nearby Duke threatens war:')
-            war = War(game.peasants, game.rebellion, distributions)
-
-            if prompt_key('Will you attack first?', 'yn') == 'y':
-                if war.first_strike(enemy_desperation, roll):
-                    print('Peace negotiations successful')
-                else:
-                    print('First strike failed - you need professionals')
-
-                game.peasants -= war.casualties
-
-            if not war.over:
-                # Note that this is the one point in the game you can go into 'credit'. You can hire
-                # more mercenaries than you have grain to pay, on the assumption that you will win the
-                # war and be able to pay them from the loot. If you don't, and you can't, then the
-                # mercenaries will extract their pay by looting your villages and land.
-                @validate_input
-                def valid_mercs(x):
-                    if x > 75:
-                        raise Overfill('There are only 75 available for hire.')
-                mercs = prompt_int('How many mercenaries will you hire at 40HL. each? ', valid_mercs)
-
-                if war.attack(mercs):
-                    print('You have won the war.')
-                else:
-                    print('You have lost the war.')
-
-                war.pay_mercenaries(mercs)
-
-                if war.casualties > game.peasants:
-                    war.casualties = game.peasants
-                game.peasants -= war.casualties
-
-            game.rebellion += war.resentment
-            game.grain     += war.grain_loot # can be used to pay the mercenaries
-            game.land      += war.annexed
-
-            report.record('War casualties', -war.casualties)
-            report.record('Fruits of war',   war.annexed)
-            report.record('Loot from war',   war.grain_loot)
-            report.record('Mercenary hire',  war.mercenary_cost)
-            report.record('Crop yield',      harvest + war.extra_harvest) # cannot be used to pay the mercenaries
+        print('A nearby Duke threatens war.')
+        mod = distributions.random(6)
+        print(mod)
+        won = War().campaign(mod, game.peasants)
+        if won:
+            print('You have won the war.')
+        else:
+            print('You have lost the war.')
 
         # demographics
         deaths = 0
@@ -385,53 +348,16 @@ def dukedom(show_report):
 
 class War:
 
-    def __init__(self, pop, resentment, luck):
-        self.casualties = 0
-        self.resentment = 0
-        self.annexed    = 0
-        self.grain_loot = 0
-        self.extra_harvest  = 0
-        self.mercenary_cost = 0
-        self.over = False
+    def campaign(self, enemy_modifier, population):
+        """Fight the war.
 
-        self._fighting_spirit = 1.2 - resentment / 16
-        self._starting_pop    = pop
-        self.duchy_strength = self._base_strength()
-        self.enemy_strength = 85 + 18 * luck.random(6)
+        Params:
 
-    def _base_strength(self):
-        pop = self._starting_pop - self.casualties
-        return round(pop * self._fighting_spirit) + 13
-
-    def first_strike(self, roll, enemy_desperation):
-        if self.enemy_strength > self.duchy_strength:
-            self.casualties = roll + enemy_desperation + 2
-            self.enemy_strengh += 3 * self.casualties
-            return False
-        else:
-            self.casualties = enemy_desperation + 1
-            self.resentment = 2 * self.casualties
-            self.over = True
-            return True
-
-    def attack(self, mercs):
-        self.enemy_strength = round(self.enemy_strength * 1.95) # enemy has hired mercenaries
-        self.duchy_strength = self._base_strength() + (7 * mercs)
-        dead = self.enemy_strength - (4 * mercs) - round(0.25 * self.duchy_strength)
-        balance_of_power = self.duchy_strength - self.enemy_strength
-        self.annexed = round(balance_of_power * 0.8)
-
-        if balance_of_power > 0:
-            self.casualties = round(dead / 10)
-            self.grain_loot = round(self.annexed * 1.7)
-            self.extra_harvest = round(0.67 * self.annexed)
-            self.mercenary_cost = 40 * mercs
-            return True
-        else:
-            return False
-
-    def pay_mercenaries(self, mercs):
-        pass
+            - enemy_modifier is a random integer in the range [1, 9].
+        """
+        away = enemy_modifier * 18 + 85     # will be in [103, 121, 139, 157, 175, 193, 211, 229, 247]
+        home = round(population * 1.2) + 13 # starting pop of 100 gives 133
+        return home > away
 
 
 def allocate(buckets, amount):
