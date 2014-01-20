@@ -315,16 +315,18 @@ def dukedom(show_report):
         report.record('Crop yield', harvest)
 
         # war
-        print('A nearby Duke threatens war.')
-        mod = distributions.random(6)
-        war = War()
-        won = war.campaign(mod, game.peasants, game.rebellion)
-        if won:
-            print('You have won the war.')
-        else:
-            print('You have lost the war.')
-        game.peasants -= war.casualties
-        report.record('War casualties', -war.casualties)
+        desperation = max(2, round(11 - 1.5 * game.crop_yield)) # How badly neighbouring duchies are driven to attack
+        if distributions.random(5) < desperation:
+            print('A nearby Duke threatens war.')
+            mod = distributions.random(6)
+            war = War()
+            won = war.campaign(mod, game.peasants, game.rebellion)
+            if won:
+                print('You have won the war.')
+            else:
+                print('You have lost the war.')
+            game.peasants -= war.casualties
+            report.record('War casualties', -war.casualties)
 
         # demographics
         deaths = 0
