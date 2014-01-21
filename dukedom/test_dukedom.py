@@ -18,6 +18,15 @@ class Tests(unittest.TestCase):
         self.assertEqual(list(dukedom.allocate([10, 10, 10], 30)), [10, 10, 10])
         self.assertEqual(list(dukedom.allocate([10, 10, 9 ], 30)), [10, 10, 9 ])
         self.assertEqual(list(dukedom.allocate([10, 10, 10], 29)), [10, 10, 9 ])
+        self.assertEqual(list(dukedom.allocate([10, 10, 10], 15, proportional=True)), [3, 5, 7])
+        self.assertEqual(list(dukedom.allocate([10,  0,  0], 15, proportional=True)), [3, 0, 0])
+        self.assertEqual(list(dukedom.allocate([ 0, 10,  0], 15, proportional=True)), [0, 5, 0])
+        self.assertEqual(list(dukedom.allocate([ 0,  0, 10], 15, proportional=True)), [0, 0, 10])
+        self.assertEqual(list(dukedom.allocate([ 0,  0,  0], 15, proportional=True)), [0, 0, 0])
+        self.assertEqual(list(dukedom.allocate([10, 10, 10],  2, proportional=True)), [2, 0, 0])
+        self.assertEqual(list(dukedom.allocate([10, 10, 10],  4, proportional=True)), [3, 1, 0])
+        self.assertEqual(list(dukedom.allocate([10, 10, 10],  9, proportional=True)), [3, 5, 1])
+        self.assertEqual(list(dukedom.allocate([10, 10, 10], 20, proportional=True)), [3, 5, 10])
 
 
 class WarTests(unittest.TestCase):
@@ -65,6 +74,25 @@ class WarTests(unittest.TestCase):
         for i, resentment in enumerate([-20, -10, 0, 10, 20, 30]):
             war.campaign(5, 100, resentment)
             self.assertEqual(war.casualties, expected[2][i], msg='resentment {}'.format(resentment))
+
+    def test_land_annexation(self):
+        expected = [
+            [ 24,  10,  -5, -19, -34, -48,  -62,  -77,  -91],
+            [-53, -43, -34, -24, -14,  -5,    5,   14,   24],
+            [166, 117,  66,  16, -34, -84, -134, -184, -234]]
+
+        war = dukedom.War()
+        for enemy in range(1, 10):
+            war.campaign(enemy, 100, 0)
+            self.assertEqual(war.annexed, expected[0][enemy-1], msg='enemy {}'.format(enemy))
+
+        for i, pop in enumerate(range(80, 160, 10)):
+            war.campaign(5, pop, 0)
+            self.assertEqual(war.annexed, expected[1][i], msg='pop {}'.format(pop))
+
+        for i, resentment in enumerate(range(-40, 40, 10)):
+            war.campaign(5, 100, resentment)
+            self.assertEqual(war.annexed, expected[2][i], msg='resentment {}'.format(resentment))
 
 
 if __name__ == '__main__':

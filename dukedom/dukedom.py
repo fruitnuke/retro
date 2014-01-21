@@ -231,7 +231,8 @@ def dukedom(show_report):
                 game.land  -= sold
 
                 # allocate sold land from good land starting at 60% and working up to 100% land
-                sold_buckets = list(reversed(list(allocate(reversed(game.buckets[:3]), sold))))
+                x = list(reversed(game.buckets[:3]))
+                sold_buckets = list(reversed(list(allocate(x, sold))))
                 game.buckets = [a - b for a, b in zip(game.buckets, chain(sold_buckets, [0, 0, 0]))]
 
                 game.grain += offer * sold
@@ -321,12 +322,27 @@ def dukedom(show_report):
             mod = distributions.random(6)
             war = War()
             won = war.campaign(mod, game.peasants, game.rebellion)
+
             if won:
                 print('You have won the war.')
+                annexed = war.annexed
+                res = []
+                for i in range(0, 3):
+                    x = round(annexed / (3 - i))
+                    res.append(x)
+                    annexed -= x
+                assert(annexed == 0)
+                game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
             else:
                 print('You have lost the war.')
+                annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
+                game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
+
             game.peasants -= war.casualties
+            game.land     += war.annexed
+
             report.record('War casualties', -war.casualties)
+            report.record('Fruits of war',   war.annexed)
 
         # demographics
         deaths = 0
@@ -355,6 +371,7 @@ class War:
 
     def __init__(self):
         self.casualties = 0
+        self.annexed    = 0
 
     def campaign(self, enemy_modifier, population, resentment):
         """Fight the war.
@@ -372,12 +389,18 @@ class War:
         away = enemy_modifier * 18 + 85                 # will be in [103, 121, 139, 157, 175, 193, 211, 229, 247]
         home = round(population * fighting_spirit) + 13 # starting pop of 100 gives 133
         self.casualties = round((away - round(home * 0.25)) / 10)
+        self.annexed    = round((home - away) * 0.8)
         return home > away
 
 
-def allocate(buckets, amount):
-    for bucket in buckets:
-        x = min(amount, bucket)
+def allocate(buckets, amount, proportional=False):
+    n = len(buckets)
+    for i, bucket in enumerate(buckets):
+        if proportional:
+            limit = round(bucket / (n - i))
+        else:
+            limit = bucket
+        x = min(amount, limit)
         amount = max(amount - x, 0)
         yield x
 
