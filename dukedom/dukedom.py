@@ -312,8 +312,6 @@ def dukedom(show_report):
                         report.record('King\'s levy', -levy)
 
         harvest = round(game.crop_yield * farmed)
-        game.grain += harvest
-        report.record('Crop yield', harvest)
 
         # war
         desperation = max(2, round(11 - 1.5 * game.crop_yield)) # How badly neighbouring duchies are driven to attack
@@ -333,13 +331,24 @@ def dukedom(show_report):
                     annexed -= x
                 assert(annexed == 0)
                 game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
+
+                # The crop you gain at the end of the year from land gained from the duchy that attacked you
+                # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
+                # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
+                # are doing.
+                crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
             else:
                 print('You have lost the war.')
                 annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
                 game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
 
+                # The amount of annexed land is a negative value here.
+                crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
+
             game.peasants -= war.casualties
             game.land     += war.annexed
+
+            harvest += crop_from_annexed_land
 
             report.record('War casualties', -war.casualties)
             report.record('Fruits of war',   war.annexed)
@@ -357,14 +366,16 @@ def dukedom(show_report):
             deaths = -round(game.peasants / (chance_of_outbreak * 5))
         game.peasants += deaths
         report.record('Disease victims', deaths)
-
         natural = round(0.3 - game.peasants / 22)
         report.record('Natural deaths', natural)
         deaths += natural
-
         births = round(game.peasants / (distributions.random(8) + 4))
-        report.record('Births', births)
+
+        # end of year
         game.peasants += births + deaths
+        game.grain    += harvest
+        report.record('Births',     births)
+        report.record('Crop yield', harvest)
 
 
 class War:
