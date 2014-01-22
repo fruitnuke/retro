@@ -41,6 +41,7 @@ TODO
 ----
 - Check the land price probability distribution / calc, it's way off.
 - Co-routines to separate UI and simulation logic?
+- resentment should reset to zero each year, and introduce long-term resentment which decays with time.
 '''
 
 import collections
@@ -323,6 +324,8 @@ def dukedom(show_report):
 
             if won:
                 print('You have won the war.')
+
+                # Allocate annexed land equally between the three buckets of 'good' land.
                 annexed = war.annexed
                 res = []
                 for i in range(0, 3):
@@ -337,6 +340,11 @@ def dukedom(show_report):
                 # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
                 # are doing.
                 crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+
+                # Grain captured immediately from annexed land (not from harvest at the end of the year. This
+                # can be used to pay mercenaries (unlike the harvest) and is the only form of credit in the game.
+                game.grain += round(war.annexed * 1.7)
+
             else:
                 print('You have lost the war.')
                 annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
