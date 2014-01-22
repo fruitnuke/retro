@@ -20,6 +20,9 @@ Differences from the original
   hectares of land (when it comes to planting seed), this mechanic does not actually appear to be implmented
   in the BASIC version (it has the text, but not the check).
 
+- As 'Fruits of war' appears in both the land and grain detailed reports, I've replaced the land entry with
+  'Annexed land' and the grain entry with 'Captured grain'.
+
 - The BASIC version includes a "partially Gaussian random #" generator, which uses a uniform random number
   generator to produce numbers with a probability density function that (seems to very loosely) approximate
   that of a normal function. Python has a (couple of) random number generator(s) with normal distribution built
@@ -79,7 +82,7 @@ class GameReport:
 
             ('Land at start',        600 ),
             ('Bought/sold',          0   ),
-            ('Fruits of war',        0   ),
+            ('Annexed land',         0   ),
             ('Land at end of year',  600 ),
 
             ('Grain at start',       5193),
@@ -88,7 +91,7 @@ class GameReport:
             ('Seeding',             -768 ),
             ('Rat losses',           0   ),
             ('Mercenary hire',       0   ),
-            ('Loot from war',        0   ),
+            ('Captured grain',       0   ),
             ('Crop yield',           1516),
             ('Castle expense',      -120 ),
             ('Grain at end of year', 4177)])
@@ -98,7 +101,7 @@ class GameReport:
 
     ZERO_EACH_YEAR = ['Starvations', 'King\'s Levy', 'Disease victims', 'Bought/sold',
                       'Land deals', 'Rat losses', 'Castle expense', 'War casualties',
-                      'Looting victims', 'Fruits of war']
+                      'Looting victims', 'Annexed land', 'Captured grain']
 
     def reset(self):
         for x in self.ZERO_EACH_YEAR:
@@ -115,8 +118,8 @@ class GameState:
         self.grain    = 4177 # Hectolitres
         self.land     = 600  # Hectares
         self.year     = 0
-        self.crop_yield    = 3.95
-        self.cool_down = 0
+        self.crop_yield = 3.95
+        self.cool_down  = 0
         self.resentment = 0 # long_term resentment trend
         self.buckets = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
@@ -324,7 +327,27 @@ def dukedom(show_report):
             won = war.campaign(mod, game.peasants, resentment)
 
             if won:
-                print('You have won the war.')
+                if war.annexed > 399:
+                    print('You have overrun the enemy and annexed\n'
+                          'his entire dukedom.')
+                    crop_from_annexed_land = round(war.annexed * 0.55)
+                    captured_grain = 3513
+
+                    # We actually gain peasants from the population of the dukedom we've annexed.
+                    war.casualties = -47
+
+                else:
+                    print('You have won the war.')
+
+                    # The crop you gain at the end of the year from land gained from the duchy that attacked you
+                    # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
+                    # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
+                    # are doing.
+                    crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+
+                    # Grain captured immediately from annexed land (not from harvest at the end of the year. This
+                    # can be used to pay mercenaries (unlike the harvest) and is the only form of credit in the game.
+                    captured_grain = round(war.annexed * 1.7)
 
                 # Allocate annexed land equally between the three buckets of 'good' land.
                 annexed = war.annexed
@@ -336,23 +359,20 @@ def dukedom(show_report):
                 assert(annexed == 0)
                 game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
 
-                # The crop you gain at the end of the year from land gained from the duchy that attacked you
-                # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
-                # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
-                # are doing.
-                crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
-
-                # Grain captured immediately from annexed land (not from harvest at the end of the year. This
-                # can be used to pay mercenaries (unlike the harvest) and is the only form of credit in the game.
-                game.grain += round(war.annexed * 1.7)
+                game.grain += captured_grain
+                report.record('Captured grain', captured_grain)
 
             else:
-                print('You have lost the war.')
-                annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
-                game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
+                if war.annexed < -round(game.land * 0.67):
+                    raise EndGame('overrun')
 
-                # The amount of annexed land is a negative value here.
-                crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
+                else:
+                    print('You have lost the war.')
+                    annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
+                    game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
+
+                    # The amount of annexed land is a negative value here.
+                    crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
 
             game.peasants -= war.casualties
             game.land += war.annexed
@@ -361,7 +381,7 @@ def dukedom(show_report):
             harvest += crop_from_annexed_land
 
             report.record('War casualties', -war.casualties)
-            report.record('Fruits of war',   war.annexed)
+            report.record('Annexed land',    war.annexed)
 
         # demographics
         deaths = 0
@@ -466,7 +486,10 @@ class EndGame(RuntimeError):
             'land loss':  'You have so little land left that\n'
                           'the peasants are tired of war and starvation.\n'
                           'You are deposed.\n',
-            'retirement': 'You have reached the age of retirement.\n'
+            'retirement': 'You have reached the age of retirement.\n',
+            'overrun'   : 'You have been overrun and and have lost\n'
+                          'your entire Dukedom. Your head is placed\n'
+                          'atop of the castle gate.\n',
             }[reason]
         super().__init__(msg)
 
