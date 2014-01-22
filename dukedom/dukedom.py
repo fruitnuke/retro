@@ -41,7 +41,6 @@ TODO
 ----
 - Check the land price probability distribution / calc, it's way off.
 - Co-routines to separate UI and simulation logic?
-- resentment should reset to zero each year, and introduce long-term resentment which decays with time.
 '''
 
 import collections
@@ -56,7 +55,10 @@ def main():
     print('')
     show_report = prompt_key('Do you want to skip detailed reports?', 'yn') == 'n'
     while True:
-        dukedom(show_report)
+        try:
+            dukedom(show_report)
+        except EndGame as e:
+            print(e)
         if prompt_key('Do you wish to play again?', 'yn') == 'n':
             break
 
@@ -115,7 +117,7 @@ class GameState:
         self.year     = 0
         self.crop_yield    = 3.95
         self.cool_down = 0
-        self.rebellion = 0 # positive is dissatisfaction, negative - satisfaction. at >88 you will be deposed.
+        self.resentment = 0 # long_term resentment trend
         self.buckets = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
 
@@ -123,9 +125,9 @@ def dukedom(show_report):
     distributions = Gaussian()  # Talbot()
     report = GameReport()
     game   = GameState()
+    resentment = 0
 
     while True:
-
         report.record('Peasants at end',      game.peasants)
         report.record('Land at end of year',  game.land)
         report.record('Grain at end of year', game.grain)
@@ -148,15 +150,19 @@ def dukedom(show_report):
                 print('(Severe crop damage due to seven year locusts.)\n')
 
         # Test for end game
+        if game.peasants < 33:
+            raise EndGame('pop loss')
         if game.land < 200:
-            print('You have so little land left that\n'
-                  'the peasants are tired of war and starvation.\n'
-                  'You are deposed.\n')
-            break
+            raise EndGame('land loss')
+        if resentment > 88 or game.resentment > 99 or game.grain < 429:
+            raise EndGame('deposed')
+        if game.year > 45:
+            raise EndGame('retirement')
 
         # We start off in game year 0 for the first report. This is presumably to show continuity with
         # whoever was running the dukedom before, and add history to the game world.
-        game.year = game.year + 1
+        game.year  = game.year + 1
+        resentment = 0
         report.record('Peasants at start', game.peasants)
         report.record('Grain at start',    game.grain)
         report.record('Land at start',     game.land)
@@ -192,17 +198,12 @@ def dukedom(show_report):
             print('Some peasants have starved')
             report.record('Starvations', -starved)
         overfed = min(4, food_per_capita - 14)
-        game.rebellion += (3 * starved) - (2 * overfed)
+        resentment += (3 * starved) - (2 * overfed)
 
-        if game.rebellion > 88:
-            print('The peasants are tired of war and starvation.\n'
-                  'You are deposed.\n')
-            break
+        if resentment > 88:
+            raise EndGame('deposed')
         elif game.peasants < 33:
-            print('You have so few peasants left that\n'
-                  'the High King has abolished your Ducal\n'
-                  'right.\n')
-            break
+            raise EndGame('pop loss')
 
         # Buy and sell land
         bid = round(2 * game.crop_yield + distributions.random(1) - 5)
@@ -320,7 +321,7 @@ def dukedom(show_report):
             print('A nearby Duke threatens war.')
             mod = distributions.random(6)
             war = War()
-            won = war.campaign(mod, game.peasants, game.rebellion)
+            won = war.campaign(mod, game.peasants, resentment)
 
             if won:
                 print('You have won the war.')
@@ -354,7 +355,8 @@ def dukedom(show_report):
                 crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
 
             game.peasants -= war.casualties
-            game.land     += war.annexed
+            game.land += war.annexed
+            resentment += 2 * war.casualties
 
             harvest += crop_from_annexed_land
 
@@ -382,6 +384,8 @@ def dukedom(show_report):
         # end of year
         game.peasants += births + deaths
         game.grain    += harvest
+        game.resentment = round(game.resentment * 0.85) + resentment
+
         report.record('Births',     births)
         report.record('Crop yield', harvest)
 
@@ -448,6 +452,23 @@ def prompt_key(msg, keys):
         val = input(msg+' ').lower()
         if val in keys:
             return val
+
+
+class EndGame(RuntimeError):
+
+    def __init__(self, reason):
+        msg = {
+            'pop loss':   'You have so few peasants left that\n'
+                          'the High King has abolished your Ducal\n'
+                          'right.\n',
+            'deposed':    'The peasants are tired of war and starvation.\n'
+                          'You are deposed.\n',
+            'land loss':  'You have so little land left that\n'
+                          'the peasants are tired of war and starvation.\n'
+                          'You are deposed.\n',
+            'retirement': 'You have reached the age of retirement.\n'
+            }[reason]
+        super().__init__(msg)
 
 
 class InvalidInput(ValueError):
