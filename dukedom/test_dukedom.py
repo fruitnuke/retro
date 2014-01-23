@@ -31,68 +31,48 @@ class Tests(unittest.TestCase):
 
 class WarTests(unittest.TestCase):
 
+    def _test(self, attr, expected):
+        war = dukedom.War()
+        for enemy in range(1, 10):
+            war.campaign(enemy, 150, -10, 10)
+            self.assertEqual(getattr(war, attr), expected[0][enemy-1], msg='enemy {}'.format(enemy))
+
+        for i, pop in enumerate(range(80, 160, 10)):
+            war.campaign(5, pop, -10, 15)
+            self.assertEqual(getattr(war, attr), expected[1][i], msg='pop {}'.format(pop))
+
+        for i, resentment in enumerate(range(-40, 40, 10)):
+            war.campaign(5, 150, resentment, 0)
+            self.assertEqual(getattr(war, attr), expected[2][i], msg='resentment {}'.format(resentment))
+
+        for i, mercs in enumerate(range(0, 71, 10)):
+            war.campaign(5, 100, 0, mercs)
+            self.assertEqual(getattr(war, attr), expected[3][i], msg='mercenaries {}'.format(mercs))
 
     def test_outcome(self):
-        """Test the outcome of war along two dimensions - population size and the random modifier (proxy for enemy size)."""
-        resentment = 0
-        war = dukedom.War()
-        winning_populations = [(1,  76), (2,  91), (3, 106), (4, 121), (5, 136),
-                               (6, 151), (7, 166), (8, 181), (9, 196)]
-        for enemy_modifier, threshold in winning_populations:
-            for population in range(33, 200):
-                won = war.campaign(enemy_modifier, population, resentment)
-                if population < threshold:
-                    self.assertFalse(won, '{} {}'.format(enemy_modifier, population))
-                else:
-                    self.assertTrue(won, '{} {}'.format(enemy_modifier, population))
-
-    def test_effect_of_resentment(self):
-        """Test the outcome of war along the third dimension - civilian resentment."""
-        enemy_modifier = 5
-        population     = 100
-        war = dukedom.War()
-        for resentment in range(-100, 89):
-            won = war.campaign(enemy_modifier, population, resentment)
-            expected_victory = resentment <= -7
-            self.assertEqual(won, expected_victory)
+        """Test the outcome of war along the four dimensions."""
+        expected = [
+            [ True,  True,  True,  True,  True, False, False, False, False],
+            [False, False, False, False, False,  True,  True,  True,  True],
+            [ True,  True,  True, False, False, False, False, False, False],
+            [False, False, False,  True,  True,  True,  True,  True]]
+        self._test('won', expected)
 
     def test_casualties(self):
         expected = [
-            [7, 9, 11, 12, 14, 16, 18, 20, 21],
-            [15, 14, 14, 14, 14, 13], # second 14 should be 15, but because of rounding and float... use decimal?
-            [11, 13, 14, 16, 17, 19]]
-
-        war = dukedom.War()
-        for enemy in range(1, 10):
-            war.campaign(enemy, 100, 0)
-            self.assertEqual(war.casualties, expected[0][enemy-1], msg='enemy {}'.format(enemy))
-
-        for i, pop in enumerate([80, 90, 100, 110, 120, 130]):
-            war.campaign(5, pop, 0)
-            self.assertEqual(war.casualties, expected[1][i], msg='pop {}'.format(pop))
-
-        for i, resentment in enumerate([-20, -10, 0, 10, 20, 30]):
-            war.campaign(5, 100, resentment)
-            self.assertEqual(war.casualties, expected[2][i], msg='resentment {}'.format(resentment))
+            [7, 11, 14, 18,  21, 25, 28, 32, 35],
+            [22, 21, 21, 20, 20, 19, 19, 18, 18],
+            [20, 22, 25, 27, 29, 32, 34, 36, 39],
+            [31, 25, 19, 14,  8,  2,  0,  0]]
+        self._test('casualties', expected)
 
     def test_land_annexation(self):
         expected = [
-            [ 24,  10,  -5, -19, -34, -48,  -62,  -77,  -91],
-            [-53, -43, -34, -24, -14,  -5,    5,   14,   24],
-            [166, 117,  66,  16, -34, -84, -134, -184, -234]]
-
-        war = dukedom.War()
-        for enemy in range(1, 10):
-            war.campaign(enemy, 100, 0)
-            self.assertEqual(war.annexed, expected[0][enemy-1], msg='enemy {}'.format(enemy))
-
-        for i, pop in enumerate(range(80, 160, 10)):
-            war.campaign(5, pop, 0)
-            self.assertEqual(war.annexed, expected[1][i], msg='pop {}'.format(pop))
-
-        for i, resentment in enumerate(range(-40, 40, 10)):
-            war.campaign(5, 100, resentment)
-            self.assertEqual(war.annexed, expected[2][i], msg='resentment {}'.format(resentment))
+            [ 125,   97,  69,  41,   13,  -15,  -43,  -72, -100],
+            [ -62,  -47, -33, -18,   -3,   11,   26,   41,   55],
+            [ 182,  106,  32, -43, -118, -194, -269, -343, -418],
+            [-166, -110, -54,   2,   58,  114,  170,  226]]
+        self._test('annexed', expected)
 
 
 if __name__ == '__main__':
