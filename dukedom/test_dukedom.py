@@ -34,19 +34,19 @@ class WarTests(unittest.TestCase):
     def _test(self, attr, expected):
         war = dukedom.War()
         for enemy in range(1, 10):
-            war.campaign(enemy, 150, -10, 10)
+            war.campaign(enemy, 150, -10, 10, 0)
             self.assertEqual(getattr(war, attr), expected[0][enemy-1], msg='enemy {}'.format(enemy))
 
         for i, pop in enumerate(range(80, 160, 10)):
-            war.campaign(5, pop, -10, 15)
+            war.campaign(5, pop, -10, 15, 0)
             self.assertEqual(getattr(war, attr), expected[1][i], msg='pop {}'.format(pop))
 
         for i, resentment in enumerate(range(-40, 40, 10)):
-            war.campaign(5, 150, resentment, 0)
+            war.campaign(5, 150, resentment, 0, 0)
             self.assertEqual(getattr(war, attr), expected[2][i], msg='resentment {}'.format(resentment))
 
         for i, mercs in enumerate(range(0, 71, 10)):
-            war.campaign(5, 100, 0, mercs)
+            war.campaign(5, 100, 0, mercs, 0)
             self.assertEqual(getattr(war, attr), expected[3][i], msg='mercenaries {}'.format(mercs))
 
     def test_outcome(self):
@@ -66,6 +66,11 @@ class WarTests(unittest.TestCase):
             [31, 25, 19, 14,  8,  2,  0,  0]]
         self._test('casualties', expected)
 
+        war = dukedom.War()
+        population = 30
+        war.campaign(9, population, 50, 0, 0)
+        self.assertEqual(war.casualties, population)
+
     def test_land_annexation(self):
         expected = [
             [ 125,   97,  69,  41,   13,  -15,  -43,  -72, -100],
@@ -73,6 +78,24 @@ class WarTests(unittest.TestCase):
             [ 182,  106,  32, -43, -118, -194, -269, -343, -418],
             [-166, -110, -54,   2,   58,  114,  170,  226]]
         self._test('annexed', expected)
+
+    def test_mercenary_pay(self):
+        war = dukedom.War()
+        for mercs in range(0, 71, 10):
+            war.campaign(5, 100, 0, mercs, 10000)
+            self.assertEqual(war.mercenary_pay, 40 * mercs)
+
+    def test_looting_victims(self):
+        vals = [(41, 0), (40, 0), (39, 1), (37, 1), (36, 2), (30, 2), (29, 3)]
+        for grain, expected in vals:
+            war = dukedom.War()
+            war.campaign(5, 100, 0, 1, grain)
+            self.assertEqual(war.looting_victims, expected)
+
+        population = 100
+        war = dukedom.War()
+        war.campaign(5, population, 0, 75, 0)
+        self.assertEqual(war.looting_victims, population)
 
 
 if __name__ == '__main__':

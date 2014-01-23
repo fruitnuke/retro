@@ -331,7 +331,7 @@ def dukedom(show_report):
             mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
 
             war = War()
-            won = war.campaign(mod, game.peasants, resentment, mercs)
+            won = war.campaign(mod, game.peasants, resentment, mercs, game.grain)
 
             if won:
                 if war.annexed > 399:
@@ -381,14 +381,20 @@ def dukedom(show_report):
                     # The amount of annexed land is a negative value here.
                     crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
 
-            game.peasants -= war.casualties
-            game.land += war.annexed
-            resentment += 2 * war.casualties
+            if war.looting_victims:
+                print('There isn\'t enough grain to pay the mercenaries.')
+
+            game.grain    -= war.mercenary_pay
+            game.peasants -= war.casualties + war.looting_victims
+            game.land  += war.annexed
+            resentment += 2 * war.casualties + 3 * war.looting_victims
 
             harvest += crop_from_annexed_land
 
-            report.record('War casualties', -war.casualties)
-            report.record('Annexed land',    war.annexed)
+            report.record('War casualties',  -war.casualties)
+            report.record('Annexed land',     war.annexed)
+            report.record('Mercenary hire',  -war.mercenary_pay)
+            report.record('Looting victims', -war.looting_victims)
 
         # demographics
         deaths = 0
@@ -423,8 +429,10 @@ class War:
         self.casualties = 0
         self.annexed = 0
         self.won = False
+        self.mercenary_pay = 0
+        self.looting_victims = 0
 
-    def campaign(self, enemy_modifier, population, resentment, mercs):
+    def campaign(self, enemy_modifier, population, resentment, mercs, grain):
         """Fight the war.
 
         Params:
@@ -441,9 +449,17 @@ class War:
         away            = round((enemy_modifier * 18 + 85) * 1.95)
         home            = round(population * fighting_spirit) + (mercs * 7) + 13
         casualties      = round((away - (mercs * 4) - round(home * 0.25)) / 10)
-        self.casualties = max(0, casualties)
+        self.casualties = min(population, max(0, casualties))
         self.annexed    = round((home - away) * 0.8)
         self.won        = home > away
+
+        pay = mercs * 40
+        if pay > grain:
+            self.mercenary_pay   = grain
+            looted = round((pay - grain) / 7) + 1
+            self.looting_victims = min(population, looted)
+        else:
+            self.mercenary_pay = pay
         return self.won
 
 
