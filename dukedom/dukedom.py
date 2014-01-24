@@ -319,6 +319,7 @@ def dukedom(show_report):
         harvest = round(game.crop_yield * farmed)
 
         # war
+        war = War()
         desperation = max(2, round(11 - 1.5 * game.crop_yield)) # How badly neighbouring duchies are driven to attack
         if distributions.random(5) < desperation:
             print('A nearby Duke threatens war.')
@@ -330,7 +331,6 @@ def dukedom(show_report):
                     raise Overfill('There are only 75 available for hire.')
             mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
 
-            war = War()
             won = war.campaign(mod, game.peasants, resentment, mercs, game.grain)
 
             if won:
@@ -338,23 +338,13 @@ def dukedom(show_report):
                     print('You have overrun the enemy and annexed\n'
                           'his entire dukedom.')
                     crop_from_annexed_land = round(war.annexed * 0.55)
-                    captured_grain = 3513
-
-                    # We actually gain peasants from the population of the dukedom we've annexed.
-                    war.casualties = -47
-
                 else:
                     print('You have won the war.')
-
                     # The crop you gain at the end of the year from land gained from the duchy that attacked you
                     # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
                     # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
                     # are doing.
                     crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
-
-                    # Grain captured immediately from annexed land (not from harvest at the end of the year. This
-                    # can be used to pay mercenaries (unlike the harvest) and is the only form of credit in the game.
-                    captured_grain = round(war.annexed * 1.7)
 
                 # Allocate annexed land equally between the three buckets of 'good' land.
                 annexed = war.annexed
@@ -366,8 +356,8 @@ def dukedom(show_report):
                 assert(annexed == 0)
                 game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
 
-                game.grain += captured_grain
-                report.record('Captured grain', captured_grain)
+                game.grain += war.captured_grain
+                report.record('Captured grain', war.captured_grain)
 
             else:
                 if war.annexed < -round(game.land * 0.67):
@@ -409,13 +399,18 @@ def dukedom(show_report):
             deaths = -round(game.peasants / (chance_of_outbreak * 5))
         game.peasants += deaths
         report.record('Disease victims', deaths)
-        natural = round(0.3 - game.peasants / 22)
-        report.record('Natural deaths', natural)
-        deaths += natural
-        births = round(game.peasants / (distributions.random(8) + 4))
+
+        natural_deaths = round(0.3 - game.peasants / 22)
+        report.record('Natural deaths', natural_deaths)
+
+        if war.looting_victims:
+            birth_mod = 4.5
+        else:
+            birth_mod = distributions.random(8) + 4
+            births = round(game.peasants / birth_mod)
 
         # end of year
-        game.peasants += births + deaths
+        game.peasants += births + natural_deaths
         game.grain    += harvest
         game.resentment = round(game.resentment * 0.85) + resentment
 
@@ -429,8 +424,9 @@ class War:
         self.casualties = 0
         self.annexed = 0
         self.won = False
-        self.mercenary_pay = 0
+        self.mercenary_pay   = 0
         self.looting_victims = 0
+        self.captured_grain  = 0
 
     def campaign(self, enemy_modifier, population, resentment, mercs, grain):
         """Fight the war.
@@ -453,6 +449,18 @@ class War:
         self.annexed    = round((home - away) * 0.8)
         self.won        = home > away
 
+        if self.won:
+            self.landslide = self.annexed > 399
+            if self.landslide:
+                # We actually gain peasants from the population of the dukedom we've annexed.
+                self.casualties = -47
+                self.captured_grain = 3513
+            else:
+                self.captured_grain = round(self.annexed * 1.7)
+            # Grain captured immediately from annexed land (not from harvest at the end of the year). This
+            # can be used to pay mercenaries (unlike the harvest) and is the only form of credit in the game.
+            grain += self.captured_grain
+
         pay = mercs * 40
         if pay > grain:
             self.mercenary_pay   = grain
@@ -460,6 +468,7 @@ class War:
             self.looting_victims = min(population, looted)
         else:
             self.mercenary_pay = pay
+
         return self.won
 
 

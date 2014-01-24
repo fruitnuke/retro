@@ -32,20 +32,23 @@ class Tests(unittest.TestCase):
 class WarTests(unittest.TestCase):
 
     def _test(self, attr, expected):
-        war = dukedom.War()
         for enemy in range(1, 10):
+            war = dukedom.War()
             war.campaign(enemy, 150, -10, 10, 0)
             self.assertEqual(getattr(war, attr), expected[0][enemy-1], msg='enemy {}'.format(enemy))
 
         for i, pop in enumerate(range(80, 160, 10)):
+            war = dukedom.War()
             war.campaign(5, pop, -10, 15, 0)
             self.assertEqual(getattr(war, attr), expected[1][i], msg='pop {}'.format(pop))
 
         for i, resentment in enumerate(range(-40, 40, 10)):
+            war = dukedom.War()
             war.campaign(5, 150, resentment, 0, 0)
             self.assertEqual(getattr(war, attr), expected[2][i], msg='resentment {}'.format(resentment))
 
         for i, mercs in enumerate(range(0, 71, 10)):
+            war = dukedom.War()
             war.campaign(5, 100, 0, mercs, 0)
             self.assertEqual(getattr(war, attr), expected[3][i], msg='mercenaries {}'.format(mercs))
 
@@ -92,11 +95,33 @@ class WarTests(unittest.TestCase):
             war.campaign(5, 100, 0, 1, grain)
             self.assertEqual(war.looting_victims, expected)
 
-        population = 100
+    def test_captured_grain_pays_mercenaries(self):
+        """Test that grain captured from the enemy during victory can be used to pay mercenaries."""
+        vals = [(160, 25, 0), (160, 23, 1), (160, 20, 2)]
+        # In this war we win by just enough to capture 15 HL. of grain from the enemy.
+        for pop, grain, looted in vals:
+            war = dukedom.War()
+            war.campaign(1, pop, 0, 1, grain)
+            self.assertEqual(war.looting_victims, looted)
+
+    def test_captured_grain(self):
+        """Test that victory results in grain captured immediately from annexed land."""
+        expected = [
+            [212, 165, 117,  70,   22,   0,   0,   0,  0],
+            [  0,   0,   0,   0,    0,  19,  44,  70, 94],
+            [309, 180,  54,   0,    0,   0,   0,   0,  0],
+            [  0,   0,   0,   3,   99, 194, 289, 384]]
+        self._test('captured_grain', expected)
+
+    def test_landslide_victory(self):
         war = dukedom.War()
-        war.campaign(5, population, 0, 75, 0)
-        self.assertEqual(war.looting_victims, population)
+        war.campaign(1, 200, -20, 50, 10000)
+        self.assertTrue(war.landslide)
+        self.assertEqual(war.casualties,    -47)
+        self.assertEqual(war.captured_grain, 3513)
+        self.assertEqual(war.looting_victims, 0)
 
 
 if __name__ == '__main__':
     unittest.main()
+#     unittest.TextTestRunner().run(unittest.TestLoader().loadTestsFromName('test_dukedom.WarTests.test_captured_grain_pays_mercenaries'))
