@@ -7,7 +7,7 @@ implementation remains true to the original game play, including bugs
 (features?) that are present in the original implementation.  I've made only
 typographical adjustments and the addition of a 'q' key to quit.
 
-	$ python wumpus.py
+	$ python wumpus/wumpus.py
 
 ## Hammurabi
 
@@ -18,7 +18,7 @@ much to feed your people, how much land to buy and sell and harvest, decide the
 fate of your city. Written in Python 3 and based on the 1978 implementation in
 [BASIC Computer Games](http://atariarchives.org/basicgames/showpage.php?page=78).
 
-    $ python3 hammurabi.py
+    $ python3 hammurabi/hammurabi.py
 
 ## Dukedom
 
