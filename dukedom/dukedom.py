@@ -39,6 +39,9 @@ Differences from the original
 - Instructions claim 'A mercenary is worth about 8 peasants in fighting power', but from the code it actually seems
   to be worth 7.
 
+- It seems there's a bug in the original where if you lose a war and some of your land is annexed but all your land
+  is 'poor land' (< 60% fertility) then the land won't be allocated out of your bucketed land, but will be taken
+  from your total.
 
 TODO
 ----
@@ -319,65 +322,77 @@ def dukedom(show_report):
         harvest = round(game.crop_yield * farmed)
 
         # war
-        war = War()
+        roll = distributions.random(5)
         desperation = max(2, round(11 - 1.5 * game.crop_yield)) # How badly neighbouring duchies are driven to attack
-        if distributions.random(5) < desperation:
+        war = War(distributions.random(6), game.peasants, resentment)
+
+        if roll < desperation:
             print('A nearby Duke threatens war.')
-            mod = distributions.random(6)
 
-            @validate_input
-            def validate_mercs(x):
-                if x > 75:
-                    raise Overfill('There are only 75 available for hire.')
-            mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
-
-            won = war.campaign(mod, game.peasants, resentment, mercs, game.grain)
-
-            if won:
-                if war.annexed > 399:
-                    print('You have overrun the enemy and annexed\n'
-                          'his entire dukedom.')
-                    crop_from_annexed_land = round(war.annexed * 0.55)
+            if prompt_key('Will you attack first?', 'yn') == 'y':
+                war.first_strike(desperation, roll)
+                if war.ceasefire:
+                    print('Peace negotiations successful')
+                    crop_from_annexed_land = 0
                 else:
-                    print('You have won the war.')
-                    # The crop you gain at the end of the year from land gained from the duchy that attacked you
-                    # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
-                    # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
-                    # are doing.
-                    crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+                    print('First strike failed - you need professionals.')
 
-                # Allocate annexed land equally between the three buckets of 'good' land.
-                annexed = war.annexed
-                res = []
-                for i in range(0, 3):
-                    x = round(annexed / (3 - i))
-                    res.append(x)
-                    annexed -= x
-                assert(annexed == 0)
-                game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
+            if not war.ceasefire:
 
-                game.grain += war.captured_grain
-                report.record('Captured grain', war.captured_grain)
+                @validate_input
+                def validate_mercs(x):
+                    if x > 75:
+                        raise Overfill('There are only 75 available for hire.')
+                mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
 
-            else:
-                if war.annexed < -round(game.land * 0.67):
-                    raise EndGame('overrun')
+                won = war.campaign(mercs, game.grain)
+
+                if won:
+                    if war.annexed > 399:
+                        print('You have overrun the enemy and annexed\n'
+                              'his entire dukedom.')
+                        crop_from_annexed_land = round(war.annexed * 0.55)
+                    else:
+                        print('You have won the war.')
+                        # The crop you gain at the end of the year from land gained from the duchy that attacked you
+                        # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
+                        # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
+                        # are doing.
+                        crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+
+                    # Allocate annexed land equally between the three buckets of 'good' land.
+                    annexed = war.annexed
+                    res = []
+                    for i in range(0, 3):
+                        x = round(annexed / (3 - i))
+                        res.append(x)
+                        annexed -= x
+                    assert(annexed == 0)
+                    game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
+
+                    game.grain += war.captured_grain
+                    report.record('Captured grain', war.captured_grain)
 
                 else:
-                    print('You have lost the war.')
-                    annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
-                    game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
+                    if war.annexed < -round(game.land * 0.67):
+                        raise EndGame('overrun')
 
-                    # The amount of annexed land is a negative value here.
-                    crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
+                    else:
+                        print('You have lost the war.')
+                        annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
+                        game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
 
-            if war.looting_victims:
-                print('There isn\'t enough grain to pay the mercenaries.')
+                        # The amount of annexed land is a negative value here.
+                        crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
 
-            game.grain    -= war.mercenary_pay
+                if war.looting_victims:
+                    print('There isn\'t enough grain to pay the mercenaries.')
+
+                game.grain -= war.mercenary_pay
+
             game.peasants -= war.casualties + war.looting_victims
             game.land  += war.annexed
-            resentment += 2 * war.casualties + 3 * war.looting_victims
+            resentment += war.resentment
 
             harvest += crop_from_annexed_land
 
@@ -420,34 +435,59 @@ def dukedom(show_report):
 
 class War:
 
-    def __init__(self):
+    """Calculate the outcome, casualties and resentment of war with a neighbouring duchy.
+
+        - enemy_modifier: a random integer in the range [1, 9], is a proxy for enemy strength / size.
+        - population: The number of peasants in your duchy.
+        - resentment: an integer that gives the level of resentment against you by your peasants.
+    """
+    def __init__(self, enemy_modifier, population, resentment):
         self.casualties = 0
         self.annexed = 0
         self.won = False
         self.mercenary_pay   = 0
         self.looting_victims = 0
         self.captured_grain  = 0
+        self.ceasefire = False
+        self.population = population
+        self.resentment = 0
 
-    def campaign(self, enemy_modifier, population, resentment, mercs, grain):
+        mood = 1.2 - (resentment / 16.0)
+        self.away = enemy_modifier * 18 + 85
+        self.home = round(population * mood) + 13
+
+    def first_strike(self, desperation, roll):
+        """Strike first while the neighbouring duchy prepares for war. Done well you can force their
+        hand into early 'peace negotiations', resulting in few casualties and a small level of resentment
+        but no losses or gains for either of you. If the first strike fails, war will occur, however you
+        will have additional losses and resentment due to the failed sortie.
+
+            - desperation: A value between 2 and 11 that represents how badly the neighbouring duchy wants
+                           to go to war, due to bad crop yields.
+            - roll:        A random value for this war, between 3 and 9.
+        """
+        self.ceasefire = self.home > self.away
+        if self.ceasefire:
+            self.casualties = 1 + desperation
+            self.resentment = 2 * self.casualties
+        else:
+            self.casualties = 2 + desperation + roll
+            self.away += (3 * self.casualties)
+
+    def campaign(self, mercs, grain):
         """Fight the war.
 
-        Params:
-
-            - enemy_modifier: a random integer in the range [1, 9], is a proxy for enemy strength / size.
-            - population: The number of peasants in your duchy.
-            - resentment: an integer that gives the level of resentment against you by your peasants.
             - mercs: a positive integer representing the number of mercenaries hired.
 
         Returns True if the campaign was won, False otherwise. Sets self.casualties with the total number
         of casualties since the war started.
         """
-        fighting_spirit = 1.2 - (resentment / 16.0)
-        away            = round((enemy_modifier * 18 + 85) * 1.95)
-        home            = round(population * fighting_spirit) + (mercs * 7) + 13
-        casualties      = round((away - (mercs * 4) - round(home * 0.25)) / 10)
-        self.casualties = min(population, max(0, casualties))
-        self.annexed    = round((home - away) * 0.8)
-        self.won        = home > away
+        self.home += (mercs * 7)
+        self.away = round(self.away * 1.95)
+        casualties      = round((self.away - (mercs * 4) - round(self.home * 0.25)) / 10)
+        self.casualties += min(self.population-self.casualties, max(0, casualties))
+        self.annexed    = round((self.home - self.away) * 0.8)
+        self.won        = self.home > self.away
 
         if self.won:
             self.landslide = self.annexed > 399
@@ -465,10 +505,11 @@ class War:
         if pay > grain:
             self.mercenary_pay   = grain
             looted = round((pay - grain) / 7) + 1
-            self.looting_victims = min(population, looted)
+            self.looting_victims = min(self.population-self.casualties, looted)
         else:
             self.mercenary_pay = pay
 
+        self.resentment = 2 * self.casualties + 3 * self.looting_victims
         return self.won
 
 
