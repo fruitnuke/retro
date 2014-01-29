@@ -54,6 +54,7 @@ import collections
 from   itertools import chain
 import random
 import textwrap
+import math
 
 
 def main():
@@ -175,7 +176,6 @@ def dukedom(show_report):
             raise EndGame('retirement')
 
         resentment = 0
-
         if king > 0:
             pay_tax = prompt_key('The King demands twice the royal tax in\n'
                                  'THE HOPE TO PROVOKE WAR. WILL YOU PAY?', 'yn')
@@ -282,6 +282,20 @@ def dukedom(show_report):
         game.grain += seeding
         report.record('Seeding', seeding)
 
+        # War with the king
+        if king == -2:
+            mercs = math.floor(game.grain / 100)
+            text = textwrap.dedent('''
+                The King\'s army is about to attack your duchy.
+                At 100HL each (pay in advance) you have hired
+                {0} foreign mercenaries.
+                '''.format(mercs)).strip()
+            print(text)
+            if (mercs * 8) + game.peasants > 2399:
+                raise EndGame('victory')
+            else:
+                raise EndGame('defeat')
+
         # Crop gains
         yld = distributions.random(2) + 9
         if (game.year % 7) == 0:
@@ -341,84 +355,87 @@ def dukedom(show_report):
         desperation = max(2, round(11 - 1.5 * game.crop_yield)) # How badly neighbouring duchies are driven to attack
         war = War(distributions.random(6), game.peasants, resentment)
 
-        if roll < desperation:
-            print('A nearby Duke threatens war.')
+        if king == -1:
+            king = -2
+            print('The High King calls for peasant levies\nand hires many foreign mercenaries.')
+        else:
+            if roll < desperation:
+                print('A nearby Duke threatens war.')
 
-            if prompt_key('Will you attack first?', 'yn') == 'y':
-                war.first_strike(desperation, roll)
-                if war.ceasefire:
-                    print('Peace negotiations successful')
-                    crop_from_annexed_land = 0
-                else:
-                    print('First strike failed - you need professionals.')
-
-            if not war.ceasefire:
-
-                @validate_input
-                def validate_mercs(x):
-                    if x > 75:
-                        raise Overfill('There are only 75 available for hire.')
-                mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
-
-                won = war.campaign(mercs, game.grain)
-
-                if won:
-                    if war.annexed > 399:
-                        print('You have overrun the enemy and annexed\n'
-                              'his entire dukedom.')
-                        crop_from_annexed_land = round(war.annexed * 0.55)
-                        if king < 1:
-                            print('\nThe King fears for his throne and\n'
-                                  'may be planning direct action.')
-                            king = 1
+                if prompt_key('Will you attack first?', 'yn') == 'y':
+                    war.first_strike(desperation, roll)
+                    if war.ceasefire:
+                        print('Peace negotiations successful')
+                        crop_from_annexed_land = 0
                     else:
-                        print('You have won the war.')
-                        # The crop you gain at the end of the year from land gained from the duchy that attacked you
-                        # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
-                        # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
-                        # are doing.
-                        crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+                        print('First strike failed - you need professionals.')
 
-                    # Allocate annexed land equally between the three buckets of 'good' land.
-                    annexed = war.annexed
-                    res = []
-                    for i in range(0, 3):
-                        x = round(annexed / (3 - i))
-                        res.append(x)
-                        annexed -= x
-                    assert(annexed == 0)
-                    game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
+                if not war.ceasefire:
 
-                    game.grain += war.captured_grain
-                    report.record('Captured grain', war.captured_grain)
+                    @validate_input
+                    def validate_mercs(x):
+                        if x > 75:
+                            raise Overfill('There are only 75 available for hire.')
+                    mercs = prompt_int('How many mercenaries will you hire at 40HL. each = ', validate_mercs)
 
-                else:
-                    if war.annexed < -round(game.land * 0.67):
-                        raise EndGame('overrun')
+                    won = war.campaign(mercs, game.grain)
+                    if won:
+                        if war.annexed > 399:
+                            print('You have overrun the enemy and annexed\n'
+                                  'his entire dukedom.')
+                            crop_from_annexed_land = round(war.annexed * 0.55)
+                            if king == 0:
+                                print('\nThe King fears for his throne and\n'
+                                      'may be planning direct action.')
+                                king = 1
+                        else:
+                            print('You have won the war.')
+                            # The crop you gain at the end of the year from land gained from the duchy that attacked you
+                            # is set at 0.67, presumably because the optimal way to farm land is to farm two-thirds of it
+                            # and to leave one-third fallow to gain nutrition; so we can assume that's what other duchies
+                            # are doing.
+                            crop_from_annexed_land = round(war.annexed * 0.67 * game.crop_yield)
+
+                        # Allocate annexed land equally between the three buckets of 'good' land.
+                        annexed = war.annexed
+                        res = []
+                        for i in range(0, 3):
+                            x = round(annexed / (3 - i))
+                            res.append(x)
+                            annexed -= x
+                        assert(annexed == 0)
+                        game.buckets = [a+b for a, b in zip(game.buckets, res + [0, 0, 0])]
+
+                        game.grain += war.captured_grain
+                        report.record('Captured grain', war.captured_grain)
 
                     else:
-                        print('You have lost the war.')
-                        annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
-                        game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
+                        if war.annexed < -round(game.land * 0.67):
+                            raise EndGame('overrun')
 
-                        # The amount of annexed land is a negative value here.
-                        crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
+                        else:
+                            print('You have lost the war.')
+                            annexed_by_bucket = list(allocate(game.buckets[:3], abs(war.annexed), proportional=True))
+                            game.buckets = [a-b for a, b in zip(game.buckets, annexed_by_bucket + [0, 0, 0])]
 
-                if war.looting_victims:
-                    print('There isn\'t enough grain to pay the mercenaries.')
+                            # The amount of annexed land is a negative value here.
+                            crop_from_annexed_land = round(war.annexed * (farmed / game.land) * game.crop_yield)
 
-                game.grain -= war.mercenary_pay
+                    if war.looting_victims:
+                        print('There isn\'t enough grain to pay the mercenaries.')
 
-            game.peasants -= war.casualties + war.looting_victims
-            game.land  += war.annexed
-            resentment += war.resentment
+                    game.grain -= war.mercenary_pay
 
-            harvest += crop_from_annexed_land
+                game.peasants -= war.casualties + war.looting_victims
+                game.land  += war.annexed
+                resentment += war.resentment
 
-            report.record('War casualties',  -war.casualties)
-            report.record('Annexed land',     war.annexed)
-            report.record('Mercenary hire',  -war.mercenary_pay)
-            report.record('Looting victims', -war.looting_victims)
+                harvest += crop_from_annexed_land
+
+                report.record('War casualties',  -war.casualties)
+                report.record('Annexed land',     war.annexed)
+                report.record('Mercenary hire',  -war.mercenary_pay)
+                report.record('Looting victims', -war.looting_victims)
 
         # demographics
         deaths = 0
@@ -608,6 +625,9 @@ class EndGame(RuntimeError):
             'overrun'   : 'You have been overrun and and have lost\n'
                           'your entire Dukedom. Your head is placed\n'
                           'atop of the castle gate.\n',
+            'defeat'    : 'Your head is placed atop of the castle gate.\n',
+            'victory'   : 'Wipe the blood from the crown - you are High King!\n'
+                          'A nearby monarchy THREATENS WAR! HOW MANY ......\n\n\n',
             'beggared'  : 'You have insufficient grain to pay\n'
                           'the royal tax.\n'
             }[reason]
