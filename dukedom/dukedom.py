@@ -47,6 +47,7 @@ TODO
 ----
 - Check the land price probability distribution / calc, it's way off.
 - Co-routines to separate UI and simulation logic?
+- Occasionally get pdfs producing 0 when they shouldn't: curve 8
 '''
 
 import collections
@@ -97,6 +98,7 @@ class GameReport:
             ('Captured grain',       0   ),
             ('Crop yield',           1516),
             ('Castle expense',      -120 ),
+            ('Royal tax',           -300 ),
             ('Grain at end of year', 4177)])
 
     def record(self, stat, x):
@@ -104,7 +106,7 @@ class GameReport:
 
     ZERO_EACH_YEAR = ['Starvations', 'King\'s Levy', 'Disease victims', 'Bought/sold',
                       'Land deals', 'Rat losses', 'Castle expense', 'War casualties',
-                      'Looting victims', 'Annexed land', 'Captured grain']
+                      'Looting victims', 'Annexed land', 'Captured grain', 'Royal tax']
 
     def reset(self):
         for x in self.ZERO_EACH_YEAR:
@@ -132,6 +134,7 @@ def dukedom(show_report):
     report = GameReport()
     game   = GameState()
     resentment = 0
+    king = 0
 
     while True:
         report.record('Peasants at end',      game.peasants)
@@ -151,9 +154,15 @@ def dukedom(show_report):
             group(stats, 4)
             print('  100%  80%  60%  40%  20%  Depl')
             print(('  ' + '{:>5}'*6).format(*game.buckets), '\n')
-            group(stats, 10)
+            group(stats, 11)
             if game.year <= 0:
                 print('(Severe crop damage due to seven year locusts.)\n')
+
+        # We start off in game year 0 for the first report. This is presumably to show continuity with
+        # whoever was running the dukedom before, and add history to the game world.
+        game.year = game.year + 1
+        tax  = 0
+        levy = 0
 
         # Test for end game
         if game.peasants < 33:
@@ -162,13 +171,19 @@ def dukedom(show_report):
             raise EndGame('land loss')
         if resentment > 88 or game.resentment > 99 or game.grain < 429:
             raise EndGame('deposed')
-        if game.year > 45:
+        if game.year > 45 and king == 0:
             raise EndGame('retirement')
 
-        # We start off in game year 0 for the first report. This is presumably to show continuity with
-        # whoever was running the dukedom before, and add history to the game world.
-        game.year  = game.year + 1
         resentment = 0
+
+        if king > 0:
+            pay_tax = prompt_key('The King demands twice the royal tax in\n'
+                                 'THE HOPE TO PROVOKE WAR. WILL YOU PAY?', 'yn')
+            if pay_tax == 'y':
+                king = 2
+            else:
+                king = -1
+
         report.record('Peasants at start', game.peasants)
         report.record('Grain at start',    game.grain)
         report.record('Land at start',     game.land)
@@ -306,7 +321,7 @@ def dukedom(show_report):
                     # workers starve to death. When this happens, the King will require some
                     # peasants from each of his Dukes as replacements. You may supply them as
                     # requested or pay an alternate amount of grain.
-                    or_grain    = levy * 100
+                    or_grain = levy * 100
                     msg = textwrap.dedent('''
                         The king requires {} peasants for
                         his estate and mines. Will you supply
@@ -314,7 +329,7 @@ def dukedom(show_report):
                         grain instead (N)o?''').format(levy, or_grain).lstrip()
                     if prompt_key(msg, 'yn') == 'n':
                         game.grain -= or_grain
-                        report.record('Castle expense', -or_grain)
+                        tax = or_grain
                     else:
                         game.peasants -= levy
                         report.record('King\'s levy', -levy)
@@ -352,6 +367,10 @@ def dukedom(show_report):
                         print('You have overrun the enemy and annexed\n'
                               'his entire dukedom.')
                         crop_from_annexed_land = round(war.annexed * 0.55)
+                        if king < 1:
+                            print('\nThe King fears for his throne and\n'
+                                  'may be planning direct action.')
+                            king = 1
                     else:
                         print('You have won the war.')
                         # The crop you gain at the end of the year from land gained from the duchy that attacked you
@@ -422,11 +441,33 @@ def dukedom(show_report):
             birth_mod = 4.5
         else:
             birth_mod = distributions.random(8) + 4
-            births = round(game.peasants / birth_mod)
+        births = round(game.peasants / birth_mod)
+
+
+        # Taxes and expenses
+
+        if harvest > 4000:
+            milling = round((harvest - 4000) * 0.1)
+        else:
+            milling = 0
+        overhead = -120
+        report.record('Castle expense', overhead - milling)
+
+        if king >= 0:
+            land_tax = round(game.land / 2)
+        else:
+            land_tax = 0
+
+        if king >= 2: # royal tax is doubled
+            land_tax *= 2
+        if land_tax > game.grain:
+            raise EndGame('beggared')
+
+        report.record('Royal tax', -tax - land_tax)
 
         # end of year
         game.peasants += births + natural_deaths
-        game.grain    += harvest
+        game.grain    += harvest - milling - land_tax
         game.resentment = round(game.resentment * 0.85) + resentment
 
         report.record('Births',     births)
@@ -567,6 +608,8 @@ class EndGame(RuntimeError):
             'overrun'   : 'You have been overrun and and have lost\n'
                           'your entire Dukedom. Your head is placed\n'
                           'atop of the castle gate.\n',
+            'beggared'  : 'You have insufficient grain to pay\n'
+                          'the royal tax.\n'
             }[reason]
         super().__init__(msg)
 
