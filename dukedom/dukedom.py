@@ -48,23 +48,28 @@ TODO
 - Check the land price probability distribution / calc, it's way off.
 - Co-routines to separate UI and simulation logic?
 - Occasionally get pdfs producing 0 when they shouldn't: curve 8
+- What happened to curve 7 - not used?
 '''
 
+import argparse
 import collections
-from   itertools import chain
+from itertools import chain
+import math
 import random
 import textwrap
-import math
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--talbot', dest='talbot', action='store_true')
+    args = parser.parse_args()
     print('')
     print('D U K E D O M')
     print('')
     show_report = prompt_key('Do you want to skip detailed reports?', 'yn') == 'n'
     while True:
         try:
-            dukedom(show_report)
+            dukedom(show_report, args.talbot)
         except EndGame as e:
             print(e)
         if prompt_key('Do you wish to play again?', 'yn') == 'n':
@@ -130,8 +135,12 @@ class GameState:
         self.buckets = [216, 200, 184, 0, 0, 0] # 100%, 80%, 60%, 40%, 20% and depleted land.
 
 
-def dukedom(show_report):
-    distributions = Gaussian()  # Talbot()
+def dukedom(show_report, use_talbot):
+    if use_talbot:
+        distributions = Talbot()
+    else:
+        distributions = Gaussian()
+
     report = GameReport()
     game   = GameState()
     resentment = 0
@@ -208,6 +217,9 @@ def dukedom(show_report):
             food_per_capita = food
             food = food * game.peasants
 
+        if food_per_capita < 11 and food != game.grain:
+            print('The peasants demonstrate before the castle.')
+
         game.grain -= food
         report.record('Used for food', -food)
 
@@ -249,7 +261,12 @@ def dukedom(show_report):
                     # That's all the grain available to pay you with.
                     raise Overfill('No buyers have that much grain, try less')
 
-            sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell)
+            try:
+                sold = prompt_int('Land to sell at {0} HL./HA. = '.format(offer), valid_sell, limit=3)
+            except LimitExceeded:
+                print('Buyers have lost interest.')
+                sold = 0
+
             if sold:
                 game.land  -= sold
 
@@ -258,13 +275,19 @@ def dukedom(show_report):
                 sold_buckets = list(reversed(list(allocate(x, sold))))
                 game.buckets = [a - b for a, b in zip(game.buckets, chain(sold_buckets, [0, 0, 0]))]
 
-                game.grain += offer * sold
+                received = offer * sold
+
+                if sold and offer < 4:
+                    print('The High King appropriates half of your earnings\nas punishment for selling at such a low price.')
+                    received = round(received / 2)
+
+                game.grain += received
                 report.record('Bought/sold', -sold)
-                report.record('Land deals', offer * sold)
+                report.record('Land deals', received)
         else:
-            game.land     += bought
+            game.land       += bought
             game.buckets[2] += bought
-            game.grain    -= bid * bought
+            game.grain      -= bid * bought
             report.record('Bought/sold', bought)
             report.record('Land deals', -bid * bought)
 
@@ -592,8 +615,12 @@ def validate_input(validf):
     return wrapper
 
 
-def prompt_int(msg, valid):
+def prompt_int(msg, valid, limit=None):
+    i = 0
     while True:
+        i += 1
+        if limit and i > limit:
+            raise LimitExceeded
         try:
             return valid(int(input(msg)))
         except InvalidInput as e:
@@ -632,6 +659,11 @@ class EndGame(RuntimeError):
                           'the royal tax.\n'
             }[reason]
         super().__init__(msg)
+
+
+class LimitExceeded(RuntimeError):
+
+    pass
 
 
 class InvalidInput(ValueError):
