@@ -119,7 +119,7 @@ class GameReport:
             self._data[x] = 0
 
     def __iter__(self):
-        return iter(list(self._data.items()))
+        return iter(self._data.items())
 
 
 class GameState:
@@ -151,19 +151,19 @@ def dukedom(show_report, use_talbot):
         report.record('Land at end of year',  game.land)
         report.record('Grain at end of year', game.grain)
 
-        print(('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain)))
+        print('\nYear {} Peasants {} Land {} Grain {}\n'.format(game.year, game.peasants, game.land, game.grain))
         if show_report:
             def group(it, n):
                 for _ in range(n):
                     label, x = next(it)
                     if x:
-                        print(('  {:<22}{}'.format(label, x)))
+                        print('  {:<22}{}'.format(label, x))
                 print('')
             stats = iter(report)
             group(stats, 9)
             group(stats, 4)
             print('  100%  80%  60%  40%  20%  Depl')
-            print((('  ' + '{:>5}'*6).format(*game.buckets), '\n'))
+            print(('  ' + '{:>5}'*6).format(*game.buckets), '\n')
             group(stats, 11)
             if game.year <= 0:
                 print('(Severe crop damage due to seven year locusts.)\n')
@@ -335,7 +335,7 @@ def dukedom(show_report, use_talbot):
         else: # avoid division by zero
             game.crop_yield = 0
 
-        print(('Yield = {} HL/HA.'.format(game.crop_yield)))
+        print('Yield = {} HL/HA.'.format(game.crop_yield))
 
         depletion  = [0] + sown[:4] + [sum(sown[4:])]
         nutrition  = [sum(fallow[:3])] + fallow[3:] + [0, 0]
@@ -622,7 +622,7 @@ def prompt_int(msg, valid, limit=None):
         if limit and i > limit:
             raise LimitExceeded
         try:
-            return valid(int(eval(input(msg))))
+            return valid(int(input(msg)))
         except InvalidInput as e:
             print(e)
         except ValueError:
